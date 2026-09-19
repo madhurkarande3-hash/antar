@@ -1,0 +1,2495 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ANTAR — Road Safety System Simulator</title>
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<style>
+:root{
+  --amber:#F5B301; --amber-d:#7a5c05; --white:#E9EDEE; --dim:#828c8e; --dim2:#525b5d;
+  --red:#FF3B2F; --bg:#050607; --panel:#0b0e0f; --panel2:#0e1213;
+  --line:#1d2426; --line2:#151a1b; --ok:#57C98A;
+  --mono: ui-monospace,SFMono-Regular,"Cascadia Mono",Consolas,"Liberation Mono",Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--white);font:12px/1.45 var(--mono);
+  -webkit-font-smoothing:antialiased;overflow:hidden;user-select:none}
+#app{height:100vh;display:grid;grid-template-rows:55fr 45fr}
+
+#stage{position:relative;overflow:hidden;background:#030405;border-bottom:1px solid #2a3234}
+#road{display:block;width:100%;height:100%}
+
+#console{display:grid;grid-template-rows:auto 1fr;min-height:0;background:var(--line)}
+#bar{display:flex;align-items:stretch;background:var(--panel);border-bottom:1px solid var(--line);height:38px}
+#bar .brand{display:flex;align-items:center;gap:9px;padding:0 12px;border-right:1px solid var(--line)}
+#bar .brand .lg{width:11px;height:11px;background:var(--amber);box-shadow:0 0 9px rgba(245,179,1,.75)}
+#bar .brand b{letter-spacing:.30em;font-size:13px;color:#fff;font-weight:700}
+#bar .clock{display:flex;align-items:center;gap:10px;padding:0 12px;border-right:1px solid var(--line);color:var(--amber);font-size:14px;letter-spacing:.05em}
+#bar .clock i{font-style:normal;color:var(--dim2);font-size:10px}
+#bar .btns{display:flex;align-items:center;gap:6px;padding:0 10px;border-right:1px solid var(--line)}
+.btn{font:inherit;font-size:11px;background:#12171a;color:#c6cdce;border:1px solid #283032;padding:5px 10px;
+  cursor:pointer;letter-spacing:.04em;display:flex;gap:7px;align-items:baseline}
+.btn b{color:#fff;font-weight:600}
+.btn span{color:var(--dim2);font-size:10px}
+.btn:hover{background:#182022;border-color:#3b4548}
+.btn.on{background:#2a1f02;border-color:var(--amber)}
+.btn.on b,.btn.on span{color:var(--amber)}
+.btn.cam{padding:4px 9px;font-size:10px}
+.btn.cam b{font-weight:600;font-size:10px}
+#bar .vlab{display:flex;align-items:center;color:#3f4749;font-size:9.5px;letter-spacing:.18em;padding-right:8px}
+#bar .stat{flex:1;display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:0 14px;color:var(--dim2);font-size:10.5px;letter-spacing:.06em}
+#bar .stat .pill{border:1px solid var(--line);padding:3px 8px;color:var(--dim);white-space:nowrap}
+#bar .stat .pill.hot{border-color:var(--red);color:var(--red);background:rgba(255,59,47,.07)}
+#bar .stat .pill.warm{border-color:var(--amber-d);color:var(--amber)}
+
+#grid{display:grid;grid-template-columns:1.5fr 1.05fr 1.12fr;gap:1px;min-height:0;background:var(--line)}
+.pane{background:var(--panel);display:grid;grid-template-rows:auto 1fr;min-height:0;min-width:0}
+.ph{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line);
+  background:var(--panel2);color:var(--dim);font-size:10.5px;letter-spacing:.16em}
+.ph b{color:#fff;font-weight:600;letter-spacing:.16em}
+.pb{overflow-y:auto;overflow-x:hidden;min-height:0}
+
+/* toolbar: keep labels on one line; drop secondary pills before anything overflows */
+#bar .btn{white-space:nowrap}
+#bar .stat{min-width:0}
+@media (min-width: 861px) and (max-width: 1500px){
+  #bar .vlab,#pFlow,#pTrk{display:none}
+  #bar .btns{padding:0 7px;gap:5px}
+  .btn{padding:5px 8px}
+}
+@media (min-width: 861px) and (max-width: 1150px){
+  #bar .clock i,#bar .btns .btn:not([data-sc]) span{display:none}
+  #bar{height:auto;flex-wrap:wrap}
+  #bar > div{min-height:38px}
+  #bar .stat{flex:1 1 auto}
+  .btn span{font-size:9px}
+}
+
+/* ground-truth caption on the road view */
+#truthTag{position:absolute;left:10px;top:10px;z-index:2;max-width:calc(100% - 20px);pointer-events:none;
+  font:600 10px/1.45 var(--mono);letter-spacing:.1em;color:#c9b8ff;background:rgba(10,8,20,.72);
+  border:1px solid rgba(180,160,255,.35);padding:5px 9px}
+#truthTag span{display:block;font-weight:400;letter-spacing:.04em;color:#9aa3a5}
+
+/* narrow screens: stack everything and let the page scroll, so every control is reachable */
+@media (max-width: 860px){
+  html,body{height:auto;overflow-x:hidden;overflow-y:auto}
+  #app{height:auto;display:block}
+  #stage{height:46vh;height:46svh;min-height:240px}
+  #console{display:block}
+  #bar{height:auto;flex-wrap:wrap}
+  #bar > div{min-height:40px;border-bottom:1px solid var(--line)}
+  #bar .btns:has([data-sc]){order:-1;width:100%;border-right:none;padding:6px 8px}
+  #bar .btns:has([data-sc]) .btn{flex:1;flex-direction:column;align-items:center;gap:1px;padding:7px 4px}
+  #bar .stat{flex:1 1 100%;justify-content:flex-start;flex-wrap:wrap;padding:6px 10px}
+  #grid{display:block}
+  .pane{height:60vh;border-bottom:1px solid var(--line)}
+  #truthTag{font-size:9px}
+}
+.pb::-webkit-scrollbar{width:8px}
+.pb::-webkit-scrollbar-thumb{background:#232b2d}
+.pb::-webkit-scrollbar-track{background:#0a0d0e}
+
+/* checklist */
+.step{display:grid;grid-template-columns:16px 1fr;gap:9px;padding:8px 11px 9px;border-bottom:1px solid var(--line2)}
+.step .ic{color:var(--dim2);font-size:12px;line-height:1.35;text-align:center}
+.step .hd{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.step .tt{color:#dfe4e5;letter-spacing:.05em;font-size:11.5px}
+.step .ts{color:#4a5254;font-size:10px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.step .kv{margin-top:4px;color:var(--dim);font-size:10.5px;display:flex;flex-wrap:wrap;gap:0 14px}
+.step .kv em{font-style:normal;color:#5d6668}
+.step .kv b{color:var(--amber);font-weight:600;font-variant-numeric:tabular-nums}
+.step .kv b.n{color:#cfd6d7} .step .kv b.r{color:var(--red)} .step .kv b.g{color:var(--ok)}
+.step .why{margin-top:6px;color:#8e9a9c;font-size:10.5px;line-height:1.6;border-left:2px solid #232b2d;padding-left:8px}
+.step.pending{opacity:.55}
+.step.ok .ic{color:var(--ok)} .step.ok .tt{color:#fff}
+.step.warn .ic{color:var(--amber)} .step.warn .tt{color:var(--amber)}
+.step.alert{background:rgba(255,59,47,.05)}
+.step.alert .ic{color:var(--red)} .step.alert .tt{color:#ff6a5f}
+.step.dead .ic{color:#3f4749} .step.dead .tt{color:var(--dim)}
+.step.live{background:rgba(245,179,1,.035)}
+.step.col{padding:3px 11px;background:none}
+.step.col .tt{font-size:10px;color:#798385;letter-spacing:.04em}
+.step.col .ts{font-size:9.5px}
+.step.col .ic{font-size:10px;color:#3f4749}
+.step.col.ok .ic{color:#3c6b52} .step.col.warn .ic{color:#7a5c05} .step.col.alert .ic{color:#8a2b23}
+.empty{padding:26px 16px;color:#4d5658;font-size:11px;line-height:2}
+.empty b{color:var(--amber);font-weight:600}
+
+/* blocks */
+.blk{padding:9px 11px;border-bottom:1px solid var(--line2)}
+.blk .lb{color:#5d6668;font-size:10px;letter-spacing:.16em;margin-bottom:7px}
+.rowv{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;padding:2px 0;gap:10px}
+.rowv em{font-style:normal;color:var(--dim)}
+.rowv b{color:#dfe4e5;font-weight:600;font-variant-numeric:tabular-nums}
+.rowv b.a{color:var(--amber)} .rowv b.r{color:var(--red)} .rowv b.g{color:var(--ok)} .rowv b.d{color:#4d5658}
+.big{font-size:24px;color:var(--amber);letter-spacing:.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+.big.r{color:var(--red)} .big.d{color:#39413f}
+.sub{color:#5d6668;font-size:10px;letter-spacing:.1em;margin-top:3px}
+
+/* FLOW — the headline evidence */
+#flowblk{padding:10px 11px 11px;border-bottom:1px solid var(--line);background:#0d1112}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.fcell{border:1px solid #232b2d;padding:6px 8px;background:#090c0d}
+.fcell .k{color:#5d6668;font-size:9.5px;letter-spacing:.14em}
+.fcell .v{font-size:22px;line-height:1.15;font-variant-numeric:tabular-nums;color:#cfd6d7}
+.fcell .u{color:#454e50;font-size:9.5px;letter-spacing:.1em}
+.fcell.exp .v{color:var(--amber)}
+.fcell.obs.lowv{border-color:#5c1b16;background:#140807}
+.fcell.obs.lowv .v{color:var(--red)}
+#gapbar{position:relative;height:16px;background:#0a0d0e;border:1px solid #232b2d;overflow:hidden}
+#gapbar .obsf{position:absolute;left:0;top:0;bottom:0;background:#F5B301;opacity:.85}
+#gapbar .gapf{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(135deg,rgba(255,59,47,.6) 0 5px,rgba(255,59,47,.22) 5px 10px)}
+#gapbar .cap{position:absolute;right:5px;top:1px;font-size:9.5px;color:#fff;letter-spacing:.1em;
+  text-shadow:0 0 4px #000;font-variant-numeric:tabular-nums}
+.gaprow{display:flex;justify-content:space-between;align-items:baseline;margin-top:6px}
+.gaprow em{font-style:normal;color:#5d6668;font-size:9.5px;letter-spacing:.14em}
+.gaprow b{font-size:15px;font-variant-numeric:tabular-nums;color:#57C98A}
+.gaprow b.r{color:var(--red)}
+#spark{display:block;width:100%;height:58px;background:#080b0c;border:1px solid #1a2122;margin-top:8px}
+
+#confBar{position:relative;height:12px;background:#101617;border:1px solid #232b2d;margin:8px 0 5px}
+#confFill{height:100%;width:0;background:linear-gradient(90deg,#6b6f52,#F5B301)}
+#confBar .dv{position:absolute;top:0;bottom:0;width:1px;background:#2f383a}
+#confBar .mk{position:absolute;top:-4px;width:2px;height:18px;background:#fff;box-shadow:0 0 6px #fff}
+.tiers{display:flex;justify-content:space-between;color:#454e50;font-size:9.5px;letter-spacing:.14em}
+.tiers span.on{color:var(--amber)}
+.tiers span.hi.on{color:var(--red)}
+.prog{height:5px;background:#101617;border:1px solid #232b2d;margin-top:7px}
+.prog i{display:block;height:100%;background:var(--amber-d)}
+
+/* active tracks table */
+.tt-head,.tt-row{display:grid;grid-template-columns:9px 56px 28px 46px 1fr;gap:7px;align-items:center;
+  padding:3px 11px;font-size:10px;font-variant-numeric:tabular-nums}
+.tt-head{color:#4a5254;letter-spacing:.1em;border-bottom:1px solid var(--line2);padding-bottom:5px}
+.tt-row{border-bottom:1px solid #0f1314;color:#a7b0b1}
+.tt-row .sw{width:9px;height:9px;border:1px solid rgba(255,255,255,.25)}
+.tt-row .id{color:#cfd6d7}
+.tt-row .ty{color:#5d6668}
+.tt-row.open .st{color:var(--amber)}
+.tt-row.closed .st{color:var(--ok)}
+.tt-row.missed{background:rgba(255,59,47,.07)}
+.tt-row.missed .st{color:var(--red)}
+.tt-row.focus{background:rgba(120,200,220,.09)}
+.tt-row.focus .id{color:#B2ECF6}
+.tnote{padding:5px 11px 8px;color:#3f4749;font-size:9.5px;line-height:1.5}
+
+/* link panel */
+.node{display:grid;grid-template-columns:9px 1fr auto;gap:8px;align-items:center;padding:4px 0;font-size:10.5px}
+.node .d{width:7px;height:7px;background:#2c3436}
+.node.up .d{background:var(--ok);box-shadow:0 0 6px rgba(87,201,138,.6)}
+.node.tx .d{background:var(--amber);box-shadow:0 0 8px rgba(245,179,1,.9)}
+.node.rx .d{background:var(--red);box-shadow:0 0 8px rgba(255,59,47,.9)}
+.node em{font-style:normal;color:#c3cacb}
+.node span{color:#525b5d;font-variant-numeric:tabular-nums;white-space:nowrap}
+.face{margin:3px 0 2px 17px;background:#0a0704;border:1px solid #2b2205;color:var(--amber);
+  padding:2px 6px;font-size:10px;letter-spacing:.12em;display:inline-block;text-shadow:0 0 6px rgba(245,179,1,.55)}
+.topo{color:#6f797b;font-size:10.5px;line-height:1.9}
+.topo b{color:#c3cacb;font-weight:600}
+.topo .ar{color:var(--amber-d)}
+.motto{margin-top:8px;padding:6px 8px;border:1px dashed #2b3335;color:#7d8688;font-size:10.5px;letter-spacing:.06em}
+.motto b{color:var(--amber);font-weight:600}
+
+/* log */
+.lg{display:grid;grid-template-columns:58px 1fr;gap:8px;padding:2px 11px;border-bottom:1px solid #0f1314;color:#7d8688;font-size:10px;line-height:1.65}
+.lg t{color:#454e50;font-variant-numeric:tabular-nums}
+.lg.a{color:#a7b0b1} .lg.w{color:var(--amber)} .lg.r{color:#ff6a5f} .lg.g{color:var(--ok)} .lg.q{color:#4d5658}
+</style>
+</head>
+<body data-intro-label="Starting the simulator">
+<script src="../assets/intro.js"></script>
+<script src="../assets/intro-gate.js"></script>
+<div id="app">
+  <div id="stage"><canvas id="road"></canvas><div id="truthTag">GROUND TRUTH · SIMULATION REFERENCE<span>What really happens on the road. ANTAR never sees this view: it only receives vehicle passage readings from POD A and POD B.</span></div></div>
+  <div id="console">
+    <div id="bar">
+      <div class="brand"><div class="lg"></div><b>ANTAR</b></div>
+      <div class="clock"><span id="clk">--:--:--.-</span><i>SIM&nbsp;×4</i></div>
+      <div class="btns">
+        <button class="btn" data-sc="A"><b>SCENARIO A</b><span>NOMINAL</span></button>
+        <button class="btn" data-sc="B"><b>SCENARIO B</b><span>INCIDENT</span></button>
+        <button class="btn" data-sc="C"><b>SCENARIO C</b><span>LEGAL EXIT</span></button>
+      </div>
+      <div class="btns">
+        <div class="vlab">VIEW</div>
+        <button class="btn cam on" data-cam="wide"><b>WIDE</b></button>
+        <button class="btn cam" data-cam="close"><b>CLOSE</b></button>
+      </div>
+      <div class="btns">
+        <button class="btn" id="soundBtn" title="Alarm when an alert is dispatched"><b>🔊 SOUND</b><span>ON</span></button>
+      </div>
+      <div class="stat">
+        <span class="pill" id="pMode">STANDBY</span>
+        <span class="pill" id="pFlow">INFLOW --/min</span>
+        <span class="pill" id="pTrk">OPEN 0</span>
+      </div>
+    </div>
+    <div id="grid">
+      <div class="pane">
+        <div class="ph"><b>DECISION CHECKLIST</b><span id="chkHint"></span></div>
+        <div class="pb" id="chk"></div>
+      </div>
+      <div class="pane">
+        <div class="ph"><b>EVIDENCE</b><span id="evHint"></span></div>
+        <div class="pb" id="ev"></div>
+      </div>
+      <div class="pane">
+        <div class="ph"><b>ACTIVE TRACKS &amp; LINK</b><span id="rtHint"></span></div>
+        <div class="pb" id="rt"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+/* ---------------------------------------------------------------- alarm
+   Synthesised with Web Audio: no sound files, works offline. Browsers only allow audio
+   after the first click, so any click on the page unlocks it. */
+const ALARM = (() => {
+  let ac = null, on = true;
+  try { on = localStorage.getItem('antar-sound') !== 'off'; } catch (e) {}
+  const unlock = () => { if (!ac) { const C = window.AudioContext || window.webkitAudioContext; if (C) ac = new C(); } if (ac && ac.state === 'suspended') ac.resume(); };
+  addEventListener('pointerdown', unlock, { capture: true });
+  addEventListener('keydown', unlock, { capture: true });
+  function tone(f0, f1, start, dur, vol, type){
+    const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + start;
+    o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.linearRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+    g.gain.setValueAtTime(vol, t + dur - 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
+  }
+  return {
+    get on(){ return on; },
+    set on(v){ on = v; try { localStorage.setItem('antar-sound', v ? 'on' : 'off'); } catch (e) {} },
+    /* incident dispatched: three rising two-tone sweeps, like an emergency wail */
+    siren(){
+      if (navigator.vibrate) navigator.vibrate([300, 120, 300, 120, 600]);
+      if (!on || !ac) return;
+      for (let i = 0; i < 3; i++){ tone(620, 1180, i * 0.62, 0.3, 0.22, 'sawtooth'); tone(1180, 620, i * 0.62 + 0.3, 0.3, 0.22, 'sawtooth'); }
+    },
+    /* candidate cleared (legal turn-off): one soft falling chime */
+    clear(){ if (!on || !ac) return; tone(880, 880, 0, 0.18, 0.12, 'sine'); tone(660, 660, 0.16, 0.32, 0.1, 'sine'); },
+    /* pod went dark: short low double beep */
+    warn(){ if (!on || !ac) return; tone(330, 330, 0, 0.14, 0.14, 'square'); tone(330, 330, 0.22, 0.14, 0.14, 'square'); }
+  };
+})();
+
+document.addEventListener('DOMContentLoaded', () => {
+  const b = document.getElementById('soundBtn'); if (!b) return;
+  const paint = () => { b.querySelector('span').textContent = ALARM.on ? 'ON' : 'OFF'; b.classList.toggle('on', ALARM.on); };
+  b.addEventListener('click', () => { ALARM.on = !ALARM.on; paint(); if (ALARM.on) ALARM.clear(); });
+  paint();
+});
+
+/* =====================================================================
+   ANTAR — road safety system simulator
+   TOP PANE    = ground truth (a two-lane undivided district road at night)
+   BOTTOM PANE = only what ANTAR actually perceives
+   The detector receives exactly two kinds of event: podA(t, speed, length,
+   signature) and podB(...). It is never told that a crash occurred.
+   ===================================================================== */
+'use strict';
+
+/* ------------------------------------------------------------- config */
+const CFG = {
+  TS: 4,                 // simulation time multiplier
+  PA: 0,                 // POD A chainage (m)
+  PB: 700,               // POD B chainage (m)
+  EXIT: 330,             // village turn-off (junction mouth)
+  CRASH: 480,            // incident point
+  PMIN: -130, PMAX: 1900,
+  CORROB: 90,            // corroboration window (sim seconds)
+  T0: 22 * 3600 + 51 * 60 + 40
+};
+/* two-lane undivided: one lane each way, left-hand traffic */
+const LANE_M = -1.85;    // monitored direction (+p)
+const LANE_O =  1.85;    // oncoming (-p)
+const EDGE   =  3.5;     // carriageway edge
+const SHLDR  =  6.4;     // end of unpaved shoulder
+
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const c01   = v => clamp(v, 0, 1);
+const kmh   = v => v * 3.6;
+const p2    = n => (n < 10 ? '0' : '') + n;
+function clk(t){
+  const s = ((t % 86400) + 86400) % 86400;
+  return p2(Math.floor(s / 3600)) + ':' + p2(Math.floor(s % 3600 / 60)) + ':' +
+         (s % 60).toFixed(1).padStart(4, '0');
+}
+const rel = d => (d >= 0 ? '+' : '') + d.toFixed(1) + 's';
+
+/* --------------------------------------------------------- fleet mix */
+/* box entries are [offsetAlong, length, halfWidth, h0, h1] and stack into a
+   simple low-poly silhouette. lamps are [offsetAlong, lateral, height]. */
+const TYPES = {
+  moto:  { k: 'moto',  n: '2W',  len: 1.95, wid: 0.70, vmin: 16.5, vmax: 22.5, w: 0.22,
+           box: [[0, 1.9, 0.32, 0.30, 1.00], [-0.25, 0.62, 0.26, 1.00, 1.72]],
+           head: [[0.95, 0, 0.95]], tail: [[-0.95, 0, 0.82]] },
+  auto:  { k: 'auto',  n: '3W',  len: 2.65, wid: 1.35, vmin: 11.0, vmax: 14.0, w: 0.10,
+           box: [[0, 2.6, 0.62, 0.32, 1.10], [-0.15, 1.9, 0.60, 1.10, 1.86]],
+           head: [[1.3, 0, 0.95]], tail: [[-1.3, -0.4, 0.85], [-1.3, 0.4, 0.85]] },
+  car:   { k: 'car',   n: 'CAR', len: 4.20, wid: 1.72, vmin: 18.0, vmax: 25.5, w: 0.46,
+           box: [[0, 4.2, 0.84, 0.30, 1.06], [-0.15, 2.25, 0.78, 1.06, 1.50]],
+           head: [[2.1, -0.62, 0.72], [2.1, 0.62, 0.72]],
+           tail: [[-2.1, -0.68, 0.88], [-2.1, 0.68, 0.88]] },
+  truck: { k: 'truck', n: 'HV',  len: 8.40, wid: 2.40, vmin: 10.0, vmax: 13.5, w: 0.13,
+           box: [[-1.3, 5.8, 1.20, 0.95, 3.05], [3.0, 2.4, 1.15, 0.70, 2.85]],
+           head: [[4.2, -0.95, 0.85], [4.2, 0.95, 0.85]],
+           tail: [[-4.2, -1.05, 0.95], [-4.2, 1.05, 0.95]],
+           marker: [[-1.3, 0, 3.05]] },
+  bus:   { k: 'bus',   n: 'HV',  len: 10.5, wid: 2.50, vmin: 12.0, vmax: 15.5, w: 0.09,
+           box: [[0, 10.4, 1.25, 0.62, 3.30]],
+           head: [[5.2, -1.0, 0.80], [5.2, 1.0, 0.80]],
+           tail: [[-5.2, -1.1, 1.00], [-5.2, 1.1, 1.00]],
+           marker: [[0, 0, 3.30]] }
+};
+const TKEYS = Object.keys(TYPES);
+function pickType(){
+  let r = Math.random(), acc = 0;
+  for (const k of TKEYS){ acc += TYPES[k].w; if (r <= acc) return TYPES[k]; }
+  return TYPES.car;
+}
+const PALETTE = ['#E8552F', '#3FA9F5', '#F5C542', '#57C98A', '#B57BE0',
+                 '#E86FA6', '#5FD0C8', '#D9DDE0', '#F08A3C', '#8FB4E8'];
+
+/* -------------------------------------------------------- world state */
+const S = {
+  t: CFG.T0, veh: [], onc: [], nid: 1, cix: 0,
+  spawnIn: 0, oncIn: 2,
+  armed: null,           // 'A' | 'crash' | 'exit' — applied to the next pass at POD A
+  scenario: null,
+  focusVeh: null,
+  secondary: null, halter: null,
+  colorOf: {},           // trackId -> body colour (a demo aid; never a pod input)
+  quiet: false
+};
+
+/* Vehicle signature: a 4D physical fingerprint per vehicle (sensor-agnostic; generated in software here).
+   Pods read it with measurement noise, and re-identify vehicles from it. */
+function makeSig(){ return [Math.random(), Math.random(), Math.random(), Math.random()]; }
+function readSig(sig){
+  const o = [];
+  for (let i = 0; i < 4; i++) o.push(clamp(sig[i] + (Math.random() - 0.5) * 0.05, 0, 1));
+  return o;
+}
+function sigDist(a, b){
+  let s = 0;
+  for (let i = 0; i < 4; i++){ const d = a[i] - b[i]; s += d * d; }
+  return Math.sqrt(s);
+}
+
+/* ------------------------------------------- the village turn-off path */
+/* Starts exactly on the monitored lane centre and curves away to the left,
+   so a turning vehicle joins it without any jump. */
+function branchPt(s){
+  s = clamp(s, 0, 2.0);
+  return { p: CFG.EXIT + 420 * s, v: LANE_M - 46 * Math.pow(s, 1.55) };
+}
+function branchTan(s){
+  const a = branchPt(Math.max(0, s - 0.004)), b = branchPt(s + 0.004);
+  const dp = b.p - a.p, dv = b.v - a.v, L = Math.hypot(dp, dv) || 1;
+  return { p: dp / L, v: dv / L };
+}
+const BRANCH_LEN = 424;
+
+/* --------------------------------------------------------- generation */
+function spawnVeh(){
+  const T = pickType();
+  const des = T.vmin + Math.random() * (T.vmax - T.vmin);
+  const col = PALETTE[S.cix++ % PALETTE.length];
+  S.veh.push({ id: S.nid++, T: T, col: col, p: CFG.PMIN, voff: LANE_M, vtgt: LANE_M,
+               spd: des, des: des, state: 'run', fate: null, trk: null,
+               blink: Math.random() * 6, sig: makeSig(), brake: 0, dodge: 0,
+               ot: 0, lastOT: -99, bs: 0, halt: 0 });
+  S.spawnIn = 5.5 + Math.random() * 5.6;   // mean headway ~8.3 s -> ~7.2 veh/min
+}
+function spawnOnc(){
+  const T = pickType();
+  S.onc.push({ T: T, col: PALETTE[(S.cix + 4) % PALETTE.length], p: CFG.PMAX,
+               voff: LANE_O, spd: T.vmin + Math.random() * (T.vmax - T.vmin),
+               blink: 0, brake: 0, state: 'run' });
+  S.oncIn = 8.0 + Math.random() * 13.0;
+}
+
+function nearestLead(v){
+  let best = null, bd = 1e9;
+  for (const o of S.veh){
+    if (o === v || o.state === 'exit') continue;
+    if (Math.abs(o.voff - v.voff) > 2.2) continue;
+    const d = o.p - v.p;
+    if (d > 0 && d < bd){ bd = d; best = o; }
+  }
+  return best;
+}
+function oncomingClear(v, ahead){
+  for (const o of S.onc){ if (o.p > v.p - 20 && o.p < v.p + ahead) return false; }
+  return true;
+}
+
+/* ------------------------------------------------------------- update */
+function updateWorld(dt){
+  S.spawnIn -= dt; if (S.spawnIn <= 0) spawnVeh();
+  S.oncIn   -= dt; if (S.oncIn   <= 0) spawnOnc();
+
+  /* secondary impact: the first follower piles into the wreck and stays */
+  if (S.secondary && S.t >= S.secondary){
+    S.secondary = null;
+    const wreck = S.veh.find(x => x.state === 'crash');
+    if (wreck){
+      let cand = null, bd = 1e9;
+      for (const o of S.veh){
+        const d = wreck.p - o.p;
+        if (o.state === 'run' && d > 3 && d < bd){ bd = d; cand = o; }
+      }
+      if (cand){
+        cand.state = 'crash'; cand.spd = 0;
+        cand.p = wreck.p - (wreck.T.len / 2 + cand.T.len / 2 + 0.8);
+        cand.voff = wreck.voff + 0.9; cand.vtgt = cand.voff;
+      }
+    }
+  }
+  /* one vehicle comes to a dead stop at the site, hazards on, then edges past */
+  if (S.halter && S.t >= S.halter){
+    S.halter = null;
+    const wreck = S.veh.find(x => x.state === 'crash');
+    if (wreck){
+      let cand = null, bd = 1e9;
+      for (const o of S.veh){
+        const d = wreck.p - o.p;
+        if (o.state === 'run' && d > 30 && d < 190 && d < bd){ bd = d; cand = o; }
+      }
+      if (cand) cand.halt = S.t + 14;
+    }
+  }
+
+  const hazards = S.veh.filter(v => v.state === 'crash');
+
+  for (const v of S.veh){
+    const prev = v.p, prevSpd = v.spd;
+    v.blink += dt;
+
+    if (v.state === 'crash'){ v.spd = 0; v.brake = 0; continue; }
+
+    /* --- turned off onto the village road: follow its curve --- */
+    if (v.state === 'exit'){
+      v.des = Math.max(8.5, v.des - 6 * dt);
+      v.spd += clamp(v.des - v.spd, -5 * dt, 2 * dt);
+      v.bs += (v.spd * dt) / BRANCH_LEN;
+      const c = branchPt(v.bs);
+      v.p = c.p; v.voff = c.v; v.vtgt = c.v;
+      continue;
+    }
+
+    /* --- car following --- */
+    let tgt = v.des;
+    const lead = nearestLead(v);
+    let gap = 1e9;
+    if (lead){
+      gap = lead.p - v.p - (lead.T.len + v.T.len) / 2;
+      const safe = Math.max(12, v.spd * 1.7);
+      if (gap < safe) tgt = Math.min(tgt, Math.max(0, lead.spd * (gap / safe)));
+      if (gap < 5) tgt = 0;
+    }
+
+    /* --- reaction to the incident (real driver behaviour; the pods see none of it) --- */
+    let dodging = false;
+    for (const h of hazards){
+      const d = h.p - v.p;
+      if (d > 0 && d < 48)         tgt = Math.min(tgt, 1.3);
+      else if (d > 0 && d < 130)   tgt = Math.min(tgt, 3.4);
+      else if (d > 0 && d < 300)   tgt = Math.min(tgt, 8.5);
+      else if (d <= 0 && d > -260) tgt = Math.min(tgt, 8.0);   // debris field downstream
+      if (d > -18 && d < 70) dodging = true;                   // swerve around the site
+    }
+    if (v.halt > S.t) tgt = 0;
+
+    /* lateral target: swerve into the opposite lane past the wreck, else lane centre */
+    if (dodging && oncomingClear(v, 220)) v.vtgt = LANE_O + 0.6;
+    else if (v.ot) v.vtgt = LANE_O;
+    else v.vtgt = LANE_M;
+
+    /* --- overtaking (single carriageway, so it means crossing the centre line) --- */
+    if (!dodging){
+      if (v.ot){
+        if (!lead || gap > 16 || !oncomingClear(v, 160)) v.ot = 0;
+      } else if (lead && lead.spd < v.des * 0.85 && gap < 65 && gap > 6 &&
+                 S.t - v.lastOT > 8 && v.p > CFG.PMIN + 40 && v.p < CFG.PB + 220 &&
+                 hazards.length === 0 && oncomingClear(v, 240)){
+        v.ot = 1; v.lastOT = S.t;
+      }
+      if (v.ot) tgt = v.des;
+    }
+
+    v.spd += clamp(tgt - v.spd, -7.5 * dt, 2.2 * dt);
+    if (v.spd < 0) v.spd = 0;
+    /* brake-light intensity from actual deceleration */
+    const decel = (prevSpd - v.spd) / Math.max(dt, 1e-4);
+    v.brake = clamp(Math.max(v.brake - dt * 2.2, decel / 4.5), 0, 1);
+    if (v.spd < 1.2 && tgt < 1) v.brake = 1;
+
+    v.voff += clamp(v.vtgt - v.voff, -3.4 * dt, 3.4 * dt);
+    v.p += v.spd * dt;
+
+    /* --- pods: physical pass events --- */
+    if (prev < CFG.PA && v.p >= CFG.PA) onPodCross('A', v);
+    if (prev < CFG.PB && v.p >= CFG.PB) onPodCross('B', v);
+
+    /* --- fate: set by the scenario button only; the detector cannot see it --- */
+    if (v.fate === 'exit'){
+      if (v.p > CFG.EXIT - 45) v.des = Math.min(v.des, 10.5);   // brief slow for the turn
+      if (v.p >= CFG.EXIT){
+        v.state = 'exit'; v.bs = 0; v.fate = null;
+        logEvt('q', '[GROUND TRUTH] tracked vehicle turned onto the village road — invisible to ANTAR');
+      }
+    }
+    if (v.fate === 'crash' && v.p >= CFG.CRASH){
+      v.state = 'crash'; v.spd = 0; v.fate = null;
+      v.voff = LANE_M - 0.5; v.vtgt = v.voff;
+      S.secondary = S.t + 1.6;
+      S.halter = S.t + 7;
+      logEvt('q', '[GROUND TRUTH] tracked vehicle stopped at K' + (CFG.CRASH / 1000).toFixed(3) +
+                  ' — invisible to ANTAR');
+    }
+  }
+
+  /* oncoming traffic is scenery only and is never counted by a pod */
+  for (const o of S.onc){ o.p -= o.spd * dt; o.blink += dt; }
+  S.onc = S.onc.filter(o => o.p > CFG.PMIN - 60);
+  S.veh = S.veh.filter(v => v.p < CFG.PMAX && v.bs < 1.9);
+
+  updateSmoke(dt);
+}
+
+/* --------------------------------------------------------------- smoke */
+const SMOKE = [];
+function updateSmoke(dt){
+  const w = S.veh.find(v => v.state === 'crash');
+  if (w && Math.random() < dt * 3.2){
+    SMOKE.push({ p: w.p + (Math.random() - 0.5) * 2.4, v: w.voff + (Math.random() - 0.5) * 1.6,
+                 h: 0.7, r: 1.1, age: 0, life: 13 + Math.random() * 6,
+                 rise: 0.42 + Math.random() * 0.36, drift: 0.30 + Math.random() * 0.34 });
+  }
+  for (let i = SMOKE.length - 1; i >= 0; i--){
+    const s = SMOKE[i];
+    s.age += dt;
+    if (s.age > s.life){ SMOKE.splice(i, 1); continue; }
+    s.h += s.rise * dt;
+    s.v += s.drift * dt;
+    s.p += s.drift * 0.5 * dt;
+    s.r += 0.36 * dt;
+  }
+}
+
+/* pass -> sensor reading (with noise) -> handed to ANTAR.
+   The vehicle object, its colour and its fate never cross this boundary. */
+function onPodCross(pod, v){
+  const meas = v.spd * (1 + (Math.random() - 0.5) * 0.022);
+  const len  = v.T.len * (1 + (Math.random() - 0.5) * 0.06);
+  const sig  = readSig(v.sig);
+  if (pod === 'A'){
+    const trk = ANTAR.podA(S.t, meas, len, sig);
+    v.trk = trk.id;
+    S.colorOf[trk.id] = v.col;
+    if (S.armed){                       // scenario applies to this vehicle
+      v.fate = (S.armed === 'A') ? null : S.armed;
+      S.focusVeh = v;
+      UI.focus(trk);
+      S.armed = null;
+    }
+  } else {
+    ANTAR.podB(S.t, meas, len, sig);
+  }
+}
+
+/* ================================================================
+   ANTAR DETECTOR — its only inputs are the podA / podB events
+   ================================================================ */
+function classOf(len){ return len < 3.0 ? '2W' : len < 5.5 ? 'CAR' : len < 7.0 ? '3W' : 'HV'; }
+
+const ANTAR = {
+  seq: 41, tracks: [], aDet: [], bDet: [], sus: null,
+
+  podA(t, v, len, sig){
+    const dist = CFG.PB - CFG.PA;
+    const k = {
+      id: 'TRK-' + String(this.seq++).padStart(4, '0'),
+      tA: t, vA: v, len: len, cls: classOf(len), dist: dist, sig: sig, dSig: null,
+      tExp:   t + dist / v,
+      tEarly: t + dist / (v * 1.30),
+      tLate:  t + Math.max(1.35 * (dist / v), dist / 9.0),
+      state: 'open', tB: null, vB: null, void: false
+    };
+    this.tracks.push(k);
+    this.aDet.push({ t: t, v: v });
+    logEvt('q', 'POD A · PASS ' + k.id + ' · ' + k.cls + ' · ' + kmh(v).toFixed(0) +
+                ' km/h · window open');
+    POD.A.face = 'A ' + k.cls + ' ' + kmh(v).toFixed(0).padStart(2, '0');
+    return k;
+  },
+
+  /* Arrival matching = time window + length class + signature re-identification.
+     A pod can tell whether this is the same vehicle; it can never tell where a
+     missing one went. */
+  podB(t, v, len, sig){
+    this.bDet.push({ t: t, v: v });
+    const cls = classOf(len);
+    let best = null, bs = 1e9;
+    for (const k of this.tracks){
+      if (k.state !== 'open' || k.void) continue;
+      if (t < k.tEarly - 2 || t > k.tLate + 2) continue;
+      if (k.cls !== cls) continue;                 // wrong class: different vehicle
+      const d = sigDist(sig, k.sig);
+      if (d > 0.16) continue;                      // signature mismatch
+      if (d < bs){ bs = d; best = k; }
+    }
+    if (best){
+      best.state = 'closed'; best.tB = t; best.vB = v; best.dSig = bs;
+      logEvt('', 'POD B · MATCH ' + best.id + ' · delta ' + rel(t - best.tExp) +
+                 ' · sig ' + bs.toFixed(3) + ' · ' + kmh(v).toFixed(0) + ' km/h');
+    } else {
+      logEvt('q', 'POD B · arrival, no open window matched · ' + cls + ' · ' +
+                  kmh(v).toFixed(0) + ' km/h');
+    }
+    POD.B.face = 'B FLW ' + this.flow(t).act.toFixed(0).padStart(2, '0');
+  },
+
+  /* Nominal segment travel time, from recent upstream speeds. */
+  tau(t){
+    let s = 0, n = 0;
+    for (const d of this.aDet) if (d.t >= t - 180){ s += d.v; n++; }
+    return (CFG.PB - CFG.PA) / (n ? s / n : 18);
+  },
+
+  /* Flow conservation over a rolling 90 s window: what POD A let in one travel
+     time ago, against what POD B has actually seen since. Counting rates rather
+     than per-vehicle ETAs keeps ordinary platooning — a car stuck behind a
+     tractor — from reading as a shortfall. */
+  flow(t){
+    const W = 90, tau = this.tau(t);
+    let expN = 0, actN = 0;
+    for (const d of this.aDet) if (d.t >= t - tau - W && d.t <= t - tau) expN++;
+    for (const d of this.bDet) if (d.t >= t - W && d.t <= t) actN++;
+    const exp = expN * 60 / W, act = actN * 60 / W;
+    return { exp: exp, act: act, n: expN, gap: Math.max(0, exp - act),
+             ratio: expN >= 5 ? c01(act / exp) : null };
+  },
+
+  /* downstream vs upstream speed (POD A is always upstream, so it is a clean baseline) */
+  speeds(t){
+    let up = 0, un = 0, dn = 0, dnn = 0;
+    for (const d of this.aDet) if (d.t >= t - 120){ up += d.v; un++; }
+    for (const d of this.bDet) if (d.t >= t - 45 ){ dn += d.v; dnn++; }
+    const uV = un ? up / un : 0, dV = dnn ? dn / dnn : 0;
+    return { up: uV, dn: dV, n: dnn, drop: (un && dnn) ? c01(1 - dV / uV) : null };
+  },
+
+  tick(t){
+    for (const k of this.tracks){
+      if (k.state === 'open' && t > k.tLate){ k.state = 'missed'; this.onMiss(k, t); }
+    }
+    if (this.sus) this.evaluate(t);
+    if (this.tracks.length > 400) this.tracks.splice(0, 120);
+    if (this.bDet.length  > 400) this.bDet.splice(0, 120);
+    if (this.aDet.length  > 400) this.aDet.splice(0, 120);
+  },
+
+  /* An event belongs to the SEGMENT, not to one vehicle: whichever absence is
+     noticed first opens it, and every later absence folds into the same event. */
+  onMiss(k, t){
+    if (this.sus && !this.sus.settled){
+      this.sus.extra.push(k);
+      logEvt('w', 'MISSED ARRIVAL ' + k.id + ' · folded into active event ' + this.sus.evt);
+      UI.onSuspicion(this.sus);
+      return;
+    }
+    if (this.sus && this.sus.settled && t - this.sus.tSettle < 40){
+      this.sus.extra.push(k);
+      logEvt('w', 'MISSED ARRIVAL ' + k.id + ' · event ' + this.sus.evt +
+                  ' already adjudicated · recorded against it');
+      UI.onSuspicion(this.sus);
+      return;
+    }
+    this.sus = {
+      evt: 'EVT-' + k.id.slice(4),
+      trk: k, tOpen: t, tClose: t + CFG.CORROB, extra: [],
+      conf: 0.18, tier: 0, reason: '', settled: false, tSettle: 0,
+      verdict: null, hist: [], f: null, sp: null
+    };
+    logEvt('w', 'SUSPICION ' + this.sus.evt + ' opened by ' + k.id +
+                ' · window expired, no match · confidence LOW · dispatch held');
+    POD.A.face = 'A WCH ' + k.id.slice(6);
+    POD.B.face = 'B NOMTCH';
+    UI.onSuspicion(this.sus);
+  },
+
+  evaluate(t){
+    const s = this.sus;
+    if (s.settled) return;
+    const f = this.flow(t), sp = this.speeds(t);
+    s.f = f; s.sp = sp;
+
+    const evAbs   = 0.18;
+    const evFlow  = f.ratio === null ? 0 : c01((1 - f.ratio - 0.10) / 0.55) * 0.46;
+    const evSpeed = sp.drop === null ? 0 : c01((sp.drop - 0.08) / 0.40) * 0.22;
+    const evMiss  = c01(s.extra.length / 3) * 0.20;
+    s.conf = c01(evAbs + evFlow + evSpeed + evMiss);
+    s.parts = { evAbs: evAbs, evFlow: evFlow, evSpeed: evSpeed, evMiss: evMiss };
+    s.tier  = s.conf >= 0.66 ? 2 : s.conf >= 0.35 ? 1 : 0;
+
+    if (t - (s.lastH || 0) > 1.0){
+      s.lastH = t;
+      s.hist.push({ t: t, exp: f.exp, act: f.act, conf: s.conf });
+      if (s.hist.length > 160) s.hist.shift();
+    }
+
+    const rp = f.ratio === null ? 'insufficient sample' : (f.ratio * 100).toFixed(0) + '% of expected';
+    const spTxt = sp.n === 0 ? 'and POD B has seen no arrival at all for 45 seconds'
+                             : 'vehicles that do get through are ' + ((sp.drop || 0) * 100).toFixed(0) +
+                               '% slower than upstream';
+    if (s.tier === 2){
+      s.reason = 'The traffic behind is testifying: downstream flow at POD B is down to ' + rp + ', ' +
+                 spTxt + ', and ' + s.extra.length + ' further arrivals are missing too. ' +
+                 'A single vehicle taking a turn-off does not slow down or swallow the cars behind it.';
+    } else if (s.tier === 1){
+      s.reason = 'Downstream is starting to look wrong: flow is ' + rp + ', ' + spTxt + ', with ' +
+                 s.extra.length + ' knock-on misses. Evidence is building but is not yet worth ' +
+                 'waking a hospital for. Keep watching.';
+    } else {
+      s.reason = 'The traffic behind is completely unaffected: downstream flow is ' + rp +
+                 (sp.n === 0 ? '' : ', pass speed matches upstream (' +
+                   ((sp.drop || 0) * 100).toFixed(0) + '% apart)') +
+                 ', and nothing else went missing. The road is not corroborating a crash — ' +
+                 'this looks like a legal turn-off.';
+    }
+
+    if (s.conf >= 0.82){ this.settle(t, true, 'EVIDENCE SUFFICIENT · EARLY DISPATCH'); return; }
+    if (t >= s.tClose)  this.settle(t, s.conf >= 0.66, 'CORROBORATION WINDOW CLOSED');
+  },
+
+  settle(t, dispatch, note){
+    const s = this.sus;
+    s.settled = true; s.tSettle = t; s.note = note;
+    s.verdict = dispatch ? 'dispatch' : 'dismiss';
+    if (dispatch){
+      logEvt('r', 'DECISION · ALERT DISPATCHED · ' + s.evt + ' · confidence ' +
+                  s.conf.toFixed(2) + ' HIGH · ' + note);
+      POD.A.face = 'A ALERT'; POD.B.face = 'B ALERT';
+      TX.start(t, s);
+      ALARM.siren();
+    } else {
+      logEvt('g', 'DECISION · SUSPICION CLEARED · ' + s.evt + ' · confidence ' +
+                  s.conf.toFixed(2) + ' ' + TIER[s.tier] + ' · legal turn-off · no dispatch');
+      POD.A.face = 'A CLEAR'; POD.B.face = 'B LINK';
+      ALARM.clear();
+    }
+    UI.onSettle(s);
+  }
+};
+
+/* ================================================================
+   PODS / LINK
+   ================================================================ */
+const POD = {
+  A: { id: 'POD A', p: CFG.PA, v: -7.2, h: 7.0, face: 'A ONLINE', rssi: -68, bat: 94, enabled: true },
+  B: { id: 'POD B', p: CFG.PB, v: -7.2, h: 7.0, face: 'B LINK',   rssi: -79, bat: 88, enabled: true },
+  /* Spare mesh relays. Dark by default — they only join the chain in the
+     pod-failure case, when the uplink pod cannot reach the tower itself. */
+  C: { id: 'POD C', p: 1290, v: -7.2, h: 7.0, face: 'C STBY',   rssi: -84, bat: 81, enabled: false },
+  D: { id: 'POD D', p: 1610, v: -7.2, h: 7.0, face: 'D STBY',   rssi: -91, bat: 76, enabled: false }
+};
+function relayPods(){
+  const c = [POD.A, POD.B];
+  if (POD.C.enabled) c.push(POD.C);
+  if (POD.D.enabled) c.push(POD.D);
+  return c;
+}
+function setPodFailure(on){ POD.C.enabled = on; POD.D.enabled = on; }
+
+const TOWER = { id: 'TOWER-07', p: 1780, v: 26, h: 42 };
+const RECIP = [
+  { n: 'NEAREST HOSPITAL', s: 'HOSPITAL',   d: 'CHC SIRSA · 8.4 km' },
+  { n: 'HIGHWAY PATROL',   s: 'PATROL',     d: 'PATROL UNIT 12 · 5.1 km' },
+  { n: 'LOCAL RESPONDERS', s: 'RESPONDERS', d: '3 REGISTERED · 2 km RADIUS' }
+];
+
+const TX = {
+  on: false, t0: 0, hops: [], recv: [], stage: -1, sus: null, done: false, tDone: 0, baseAcc: 0,
+  start(t, sus){
+    this.on = true; this.done = false; this.t0 = performance.now() / 1000; this.sus = sus;
+    this.stage = 0;
+    const names = relayPods().map(function(p){ return p.id; }).concat([TOWER.id]);
+    this.hops = []; let acc = 0;
+    for (let i = 0; i < names.length - 1; i++){
+      const ms = Math.round(26 + Math.random() * 44); acc += ms;
+      this.hops.push({ a: names[i], b: names[i + 1], ms: ms, acc: acc, lit: false });
+    }
+    this.baseAcc = acc;
+    this.recv = RECIP.map(function(r, i){
+      return { n: r.n, s: r.s, d: r.d, ms: Math.round(190 + Math.random() * 170 + i * 60), lit: false };
+    });
+  },
+  update(){
+    if (!this.on) return;
+    const e = performance.now() / 1000 - this.t0, HOP = 0.85;
+    for (let i = 0; i < this.hops.length; i++) this.hops[i].lit = e > (i + 1) * HOP;
+    this.stage = Math.min(this.hops.length, Math.floor(e / HOP));
+    const after = e - this.hops.length * HOP;
+    let allr = true;
+    this.recv.forEach(function(r, i){ r.lit = after > 0.55 + i * 0.55; if (!r.lit) allr = false; });
+    if (allr && !this.done){
+      this.done = true; this.tDone = e;
+      logEvt('r', 'TRANSMISSION COMPLETE · 3/3 simulated recipients acknowledged · end-to-end ' +
+                  (this.baseAcc + this.recv[2].ms) + ' ms');
+      POD.A.face = 'A ACK'; POD.B.face = 'B ACK';
+    }
+  },
+  /* the on-road strip animates during dispatch, then fades back out */
+  alpha(){
+    if (!this.on) return 0;
+    const e = performance.now() / 1000 - this.t0;
+    if (e < 0.35) return c01(e / 0.35);
+    if (!this.done) return 1;
+    const since = e - this.tDone;
+    if (since < 4.5) return 1;
+    return c01(1 - (since - 4.5) / 1.8);
+  },
+  reset(){ this.on = false; this.done = false; this.stage = -1; this.hops = []; this.recv = []; }
+};
+
+
+/* ================================================================
+   RENDER — top pane: unlit district road at night (ground truth)
+   ================================================================ */
+const MONO = 'ui-monospace,Consolas,monospace';
+const cv = document.getElementById('road');
+const ctx = cv.getContext('2d');
+const stage = document.getElementById('stage');
+let W = 0, H = 0, DPR = 1;
+
+const VIEW = { Kd: 6, LAT: 19, hor: 0.31, base: 1.04, xn: 0.16, xv: 0.655 };
+
+/* Manual camera. Default WIDE is the identity transform, so the presenting
+   view never moves on its own. CLOSE eases into a push-in on the mid-segment
+   (or the incident, once there is one). */
+const CAM = { mode: 'wide', z: 1, zt: 1, fx: 0, fy: 0, cx: 0, cy: 0, focusP: 0 };
+
+function camFocusP(){
+  const w = S.veh.find(function(v){ return v.state === 'crash'; });
+  if (w) return w.p;
+  if (S.focusVeh && S.veh.indexOf(S.focusVeh) >= 0) return S.focusVeh.p;
+  return (CFG.PA + CFG.PB) / 2;
+}
+function setCam(mode){
+  CAM.mode = mode;
+  CAM.zt = mode === 'close' ? 2.35 : 1;
+}
+function updateCam(dtw){
+  const k = 1 - Math.pow(0.0025, dtw);
+  CAM.z += (CAM.zt - CAM.z) * k;
+  if (Math.abs(CAM.z - CAM.zt) < 0.004) CAM.z = CAM.zt;
+  const tp = camFocusP();
+  CAM.focusP += (tp - CAM.focusP) * (1 - Math.pow(0.02, dtw));
+  const f = projBase(CAM.focusP, 0, 2.2);
+  CAM.fx = f.x; CAM.fy = f.y;
+  CAM.cx = W * 0.5; CAM.cy = H * 0.54;
+}
+
+/* p = chainage (m), v = lateral offset (m), h = height (m) */
+function projBase(p, v, h){
+  let t = (p - CFG.PMIN) / (CFG.PMAX - CFG.PMIN);
+  t = clamp(t, -0.03, 1.35);
+  const s  = 1 / (1 + VIEW.Kd * t);
+  const yr = VIEW.hor * H + s * (VIEW.base * H - VIEW.hor * H);
+  const cx = VIEW.xn * W + (VIEW.xv - VIEW.xn) * W * (1 - s);
+  return { x: cx + v * VIEW.LAT * s, y: yr - (h || 0) * VIEW.LAT * s * 0.95, s: s };
+}
+function proj(p, v, h){
+  const b = projBase(p, v, h);
+  if (CAM.z === 1) return b;
+  return { x: CAM.cx + (b.x - CAM.fx) * CAM.z,
+           y: CAM.cy + (b.y - CAM.fy) * CAM.z,
+           s: b.s * CAM.z };
+}
+function horizonY(){
+  if (CAM.z === 1) return VIEW.hor * H;
+  return CAM.cy + (VIEW.hor * H - CAM.fy) * CAM.z;
+}
+
+/* ---------------------------------------------------------- helpers */
+function quad(a, b, c, d, fill){
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+  ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.closePath();
+  ctx.fillStyle = fill; ctx.fill();
+}
+function band(p0, p1, v0, v1, fill){
+  quad(proj(p0, v0, 0), proj(p1, v0, 0), proj(p1, v1, 0), proj(p0, v1, 0), fill);
+}
+function seg(p0, v0, p1, v1, color, wMul){
+  const a = proj(p0, v0, 0), b = proj(p1, v1, 0);
+  if (Math.abs(b.x - a.x) + Math.abs(b.y - a.y) < 0.4) return;
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+  ctx.lineWidth = Math.max(0.5, 0.16 * VIEW.LAT * (a.s + b.s) * 0.5 * (wMul || 1));
+  ctx.strokeStyle = color; ctx.stroke();
+}
+function glow(x, y, r, c0, c1){
+  if (!(r > 0)) return;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, c0); g.addColorStop(1, c1);
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+}
+function hex2rgb(h){
+  return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+}
+function shade(rgb, f, a){
+  return 'rgba(' + Math.round(rgb[0] * f) + ',' + Math.round(rgb[1] * f) + ',' +
+         Math.round(rgb[2] * f) + ',' + (a === undefined ? 1 : a) + ')';
+}
+/* a polygon given in world space {p,v,h} */
+function poly3(pts, fill, stroke, lw){
+  ctx.beginPath();
+  for (let i = 0; i < pts.length; i++){
+    const q = proj(pts[i].p, pts[i].v, pts[i].h);
+    if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y);
+  }
+  ctx.closePath();
+  if (fill){ ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke){ ctx.strokeStyle = stroke; ctx.lineWidth = lw || 1; ctx.stroke(); }
+}
+/* local frame -> world: x along T, y along N, z up, about origin (op,ov,oh) */
+function LP(o, T, N, x, y, z){
+  return { p: o.p + T.p * x + N.p * y, v: o.v + T.v * x + N.v * y, h: o.h + z };
+}
+function yawFrame(a){
+  return { T: { p: Math.cos(a), v: Math.sin(a) }, N: { p: -Math.sin(a), v: Math.cos(a) } };
+}
+
+/* when zoomed in, most of the road is off-screen; skip what cannot be seen */
+function onScreen(q, m){
+  m = m || 120;
+  return q.x > -m && q.x < W + m && q.y > -m && q.y < H + m;
+}
+
+function resize(){
+  const r = stage.getBoundingClientRect();
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = Math.max(320, r.width); H = Math.max(200, r.height);
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  buildScenery();
+  buildSky();
+}
+window.addEventListener('resize', resize);
+
+/* shortest distance from a point to the village road, in metres */
+function distToBranch(p, v){
+  let best = 1e9;
+  for (let i = 0; i <= 32; i++){
+    const c = branchPt(i / 32 * 1.55);
+    const d = Math.hypot(c.p - p, c.v - v);
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+/* ------------------------------------------------- static scenery data */
+let PATCH = [], GRIT = [], FLORA = [], VILLAGE = [], VLAMP = null, VCEN = null;
+function buildScenery(){
+  let sd = 20260822;
+  const rnd = function(){ sd = (sd * 1664525 + 1013904223) % 4294967296; return sd / 4294967296; };
+  PATCH = [];
+  for (let i = 0; i < 46; i++){
+    const p = CFG.PMIN + rnd() * (CFG.PMAX - CFG.PMIN);
+    PATCH.push({ p: p, l: 5 + rnd() * 22, v: -EDGE + rnd() * (EDGE * 2), w: 0.7 + rnd() * 1.9,
+                 d: rnd() < 0.5 ? -1 : 1, a: 0.05 + rnd() * 0.09 });
+  }
+  GRIT = [];
+  for (let i = 0; i < 260; i++){
+    GRIT.push({ p: CFG.PMIN + rnd() * (CFG.PMAX - CFG.PMIN), v: -EDGE - 1 + rnd() * (EDGE * 2 + 2),
+                a: 0.03 + rnd() * 0.07, s: 0.5 + rnd() * 1.2 });
+  }
+  FLORA = [];
+  for (let i = 0; i < 90; i++){
+    let fp = 0, fv = 0, ok = false;
+    for (let tries = 0; tries < 8 && !ok; tries++){
+      fp = CFG.PMIN + rnd() * (CFG.PMAX - CFG.PMIN);
+      fv = (rnd() < 0.5 ? -1 : 1) * (SHLDR + 0.8 + rnd() * 16);
+      ok = distToBranch(fp, fv) > 11;      // nothing grows in the road corridor
+    }
+    if (!ok) continue;
+    const tree = rnd() < 0.36;
+    FLORA.push({ p: fp, v: fv,
+                 h: tree ? 4.5 + rnd() * 4.5 : 1.0 + rnd() * 1.4,
+                 w: tree ? 1.9 + rnd() * 2.2 : 1.1 + rnd() * 1.6, tree: tree });
+  }
+  /* the settlement the turn-off actually leads to: an irregular cluster
+     straddling the far end of the village road */
+  VILLAGE = [];
+  for (let i = 0; i < 9; i++){
+    const s = 0.88 + rnd() * 0.38;
+    const c = branchPt(s);
+    const side = rnd() < 0.5 ? -1 : 1;
+    VILLAGE.push({
+      p: c.p + (rnd() - 0.5) * 62,
+      v: c.v + side * (7 + rnd() * 24),
+      w: 7.0 + rnd() * 6.0, d: 6.0 + rnd() * 4.0, h: 3.6 + rnd() * 2.4,
+      a: (rnd() - 0.5) * 0.9, slope: rnd() < 0.45,
+      lit: rnd() < 0.72, win: rnd() < 0.45 ? 1 : 2, ph: rnd() * 6.28
+    });
+  }
+  VCEN = branchPt(1.05);
+  const lc = branchPt(1.02);
+  VLAMP = { p: lc.p + 10, v: lc.v - 6, h: 6.2 };
+}
+
+/* --------------------------------------------------------- night sky */
+/* The static field (Milky Way plus faint stars) is baked once into an
+   offscreen canvas; only the brightest ~80 are drawn live so they can
+   twinkle without costing a redraw of the whole field. */
+let SKY = null, BRIGHT = [];
+function buildSky(){
+  const hh = Math.max(40, Math.ceil(H * 0.55));
+  SKY = document.createElement('canvas');
+  SKY.width = Math.round(W * DPR); SKY.height = Math.round(hh * DPR);
+  const g = SKY.getContext('2d');
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  let sd = 5150913;
+  const rnd = function(){ sd = (sd * 1664525 + 1013904223) % 4294967296; return sd / 4294967296; };
+
+  /* Milky Way: a soft band of light laid diagonally across the sky */
+  const ang = -0.42, cxb = W * 0.62, cyb = hh * 0.30;
+  const dx = Math.cos(ang), dy = Math.sin(ang);
+  const span = W * 1.3;
+  g.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 70; i++){
+    const u = (i / 69 - 0.5) * span;
+    const j = (rnd() - 0.5) * hh * 0.16;
+    const x = cxb + dx * u - dy * j, y = cyb + dy * u + dx * j;
+    const r = hh * (0.16 + rnd() * 0.13);
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, 'rgba(126,140,178,0.030)');
+    gr.addColorStop(1, 'rgba(110,124,160,0)');
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  }
+
+  /* faint field stars, denser along the band */
+  const star = function(x, y, mag){
+    const a = Math.pow(mag, 2.6) * 0.62 + 0.035;
+    const r = 0.34 + mag * 0.62;
+    const warm = rnd() < 0.22;
+    const col = warm ? '255,226,196' : (rnd() < 0.3 ? '208,222,255' : '236,242,252');
+    g.fillStyle = 'rgba(' + col + ',' + a.toFixed(3) + ')';
+    g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  };
+  for (let i = 0; i < 950; i++) star(rnd() * W, rnd() * hh, rnd());
+  for (let i = 0; i < 520; i++){            // band concentration
+    const u = (rnd() - 0.5) * span, j = (rnd() - 0.5 + (rnd() - 0.5)) * hh * 0.19;
+    star(cxb + dx * u - dy * j, cyb + dy * u + dx * j, rnd() * 0.8);
+  }
+  g.globalCompositeOperation = 'source-over';
+
+  BRIGHT = [];
+  for (let i = 0; i < 82; i++){
+    const warm = rnd() < 0.24;
+    BRIGHT.push({ x: rnd() * W, y: rnd() * hh * 0.96,
+                  a: 0.32 + rnd() * 0.5, r: 0.75 + rnd() * 0.85,
+                  c: warm ? '255,224,190' : (rnd() < 0.3 ? '204,220,255' : '240,246,255'),
+                  ph: rnd() * 6.28, rate: 0.12 + rnd() * 0.30 });
+  }
+}
+
+function drawSky(){
+  const hy = horizonY();
+  ctx.fillStyle = '#020406';
+  ctx.fillRect(0, 0, W, Math.max(0, hy) + 2);
+  if (hy <= 1) return;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 0, W, hy); ctx.clip();
+  if (SKY) ctx.drawImage(SKY, 0, 0, W, SKY.height / DPR);
+  const now = performance.now() / 1000;
+  for (const st of BRIGHT){
+    if (st.y > hy) continue;
+    const tw = 0.80 + 0.20 * Math.sin(now * st.rate + st.ph);
+    ctx.fillStyle = 'rgba(' + st.c + ',' + (st.a * tw).toFixed(3) + ')';
+    ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, 7); ctx.fill();
+    if (st.r > 1.3){
+      ctx.globalCompositeOperation = 'lighter';
+      glow(st.x, st.y, st.r * 3.2, 'rgba(' + st.c + ',' + (0.10 * tw).toFixed(3) + ')',
+           'rgba(' + st.c + ',0)');
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  }
+  ctx.restore();
+  /* atmospheric extinction: stars fade out into the horizon so the sky
+     always sits behind the land and never competes with it */
+  const gz = ctx.createLinearGradient(0, hy - H * 0.16, 0, hy + 3);
+  gz.addColorStop(0, 'rgba(3,5,7,0)');
+  gz.addColorStop(0.72, 'rgba(3,5,7,0.72)');
+  gz.addColorStop(1, 'rgba(3,5,7,0.97)');
+  ctx.fillStyle = gz;
+  ctx.fillRect(0, Math.max(0, hy - H * 0.16), W, Math.min(H, H * 0.16) + 4);
+}
+
+/* ---------------------------------------------------------- the road */
+function drawGround(){
+  const P0 = CFG.PMIN, P1 = CFG.PMAX;
+  band(P0, P1, -200, 90, '#050708');
+  band(P0, P1, -SHLDR, SHLDR, '#100d09');
+  band(P0, P1, -EDGE, EDGE, '#141719');
+
+  ctx.save();
+  const a = proj(P0, -EDGE, 0), b = proj(P1, -EDGE, 0), c = proj(P1, EDGE, 0), d = proj(P0, EDGE, 0);
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+  ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.closePath(); ctx.clip();
+  const g = ctx.createLinearGradient(0, horizonY(), 0, H);
+  g.addColorStop(0, '#0d1012'); g.addColorStop(0.5, '#131719'); g.addColorStop(1, '#171b1d');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (const q of PATCH){
+    band(q.p, q.p + q.l, q.v, q.v + q.w,
+         q.d < 0 ? 'rgba(6,8,9,' + q.a.toFixed(3) + ')' : 'rgba(150,150,140,' + (q.a * 0.5).toFixed(3) + ')');
+  }
+  ctx.restore();
+
+  seg(P0, -EDGE, P1, -EDGE, 'rgba(52,44,32,0.55)', 1.4);
+  seg(P0,  EDGE, P1,  EDGE, 'rgba(52,44,32,0.55)', 1.4);
+
+  for (const q of GRIT){
+    const s = proj(q.p, q.v, 0);
+    if (s.y < horizonY() || !onScreen(s, 40)) continue;
+    ctx.fillStyle = 'rgba(140,132,116,' + (q.a * Math.min(1, s.s * 2.6)).toFixed(3) + ')';
+    ctx.fillRect(s.x, s.y, Math.max(0.6, q.s * s.s * 2), Math.max(0.6, q.s * s.s * 1.4));
+  }
+
+  for (let p = Math.floor(P0 / 16) * 16; p < P1; p += 16){
+    if (proj(p, 0, 0).y < horizonY() + 1) break;
+    const seed = Math.abs(Math.sin(p * 0.021));
+    if (seed < 0.34) continue;
+    seg(p, 0, p + 5.5 * (0.5 + seed * 0.5), 0,
+        'rgba(206,198,168,' + (0.10 + seed * 0.30).toFixed(2) + ')', 0.95);
+  }
+}
+
+/* ------------------------------------------------ the village turn-off */
+function branchEdge(s, half){
+  const c = branchPt(s), T = branchTan(s);
+  return { p: c.p - T.v * half, v: c.v + T.p * half };
+}
+/* bare earth the cluster stands on — painted before the road so it never covers it */
+function drawVillagePad(){
+  if (!VCEN) return;
+  const c = proj(VCEN.p, VCEN.v, 0);
+  if (!onScreen(c, 280)) return;
+  const r = Math.max(30, 150 * VIEW.LAT * c.s * 0.5);
+  ctx.fillStyle = 'rgba(15,17,16,0.9)';
+  ctx.beginPath(); ctx.ellipse(c.x, c.y, r, r * 0.30, 0, 0, 6.2832); ctx.fill();
+}
+
+function drawBranch(){
+  const N = 40, HW = 2.7, SMAX = 1.72;
+  for (let i = 0; i < N; i++){
+    const s0 = SMAX * i / N, s1 = SMAX * (i + 1) / N;
+    const w0 = HW * (1 - 0.22 * s0 / SMAX), w1 = HW * (1 - 0.22 * s1 / SMAX);
+    const l0 = branchEdge(s0, -w0), r0 = branchEdge(s0, w0);
+    const l1 = branchEdge(s1, -w1), r1 = branchEdge(s1, w1);
+    const fade = 1 - (s0 / SMAX) * 0.22;
+    quad(proj(l0.p, l0.v, 0), proj(l1.p, l1.v, 0), proj(r1.p, r1.v, 0), proj(r0.p, r0.v, 0),
+         'rgba(34,39,42,' + fade.toFixed(3) + ')');
+  }
+  quad(proj(CFG.EXIT - 16, -EDGE, 0), proj(CFG.EXIT + 20, -EDGE, 0),
+       proj(CFG.EXIT + 26, -EDGE - 5.5, 0), proj(CFG.EXIT - 6, -EDGE - 3.0, 0),
+       'rgba(34,39,42,0.95)');
+  for (let i = 0; i < N; i++){
+    const s0 = SMAX * i / N, s1 = SMAX * (i + 1) / N;
+    const w0 = HW * (1 - 0.22 * s0 / SMAX) + 0.35, w1 = HW * (1 - 0.22 * s1 / SMAX) + 0.35;
+    const a = 0.46 * (1 - (s0 / SMAX) * 0.35);
+    let e0 = branchEdge(s0, -w0), e1 = branchEdge(s1, -w1);
+    seg(e0.p, e0.v, e1.p, e1.v, 'rgba(104,92,66,' + a.toFixed(3) + ')', 1.1);
+    e0 = branchEdge(s0, w0); e1 = branchEdge(s1, w1);
+    seg(e0.p, e0.v, e1.p, e1.v, 'rgba(104,92,66,' + a.toFixed(3) + ')', 1.1);
+  }
+}
+
+/* The settlement at the end of the turn-off. Deliberately unlit and poor, but
+   it has to read at a glance in the default view, so the structures sit a shade
+   above the ground behind them and the windows are the brightest warm points
+   anywhere off the carriageway. */
+function drawVillage(){
+  if (!VILLAGE.length) return;
+  const now = performance.now() / 1000;
+
+  const far = VILLAGE.slice().sort(function(a, b){ return b.p - a.p; });
+  for (const b of far){
+    const o = { p: b.p, v: b.v, h: 0 }, fr = yawFrame(b.a);
+    const T = fr.T, N = fr.N;
+    const hd = b.d / 2, hw = b.w / 2;
+    const base = proj(b.p, b.v, 0);
+    if (base.y < horizonY() - 40 || !onScreen(base, 240)) continue;
+    const c = function(x, y, z){ return LP(o, T, N, x, y, z); };
+
+    /* walls — a clear step above the ground tone */
+    poly3([c(hd, -hw, 0), c(hd, hw, 0), c(hd, hw, b.h), c(hd, -hw, b.h)], '#131a20');
+    poly3([c(-hd, hw, 0), c(hd, hw, 0), c(hd, hw, b.h), c(-hd, hw, b.h)], '#1a232a');
+    poly3([c(-hd, -hw, 0), c(-hd, hw, 0), c(-hd, hw, b.h), c(-hd, -hw, b.h)], '#2c3843');
+    /* roof, catching what little sky there is */
+    if (b.slope){
+      poly3([c(-hd, -hw, b.h), c(hd, -hw, b.h), c(hd, 0, b.h + 1.1), c(-hd, 0, b.h + 1.1)], '#1d262e');
+      poly3([c(-hd, hw, b.h), c(hd, hw, b.h), c(hd, 0, b.h + 1.1), c(-hd, 0, b.h + 1.1)], '#2c3843');
+      poly3([c(-hd, -hw, b.h), c(-hd, 0, b.h + 1.1), c(-hd, hw, b.h)], '#26313a',
+            'rgba(132,152,168,0.38)', 1);
+    } else {
+      poly3([c(-hd, -hw, b.h), c(hd, -hw, b.h), c(hd, hw, b.h), c(-hd, hw, b.h)], '#2c3843',
+            'rgba(132,152,168,0.36)', 1);
+    }
+
+    /* lit windows — the brightest warm points off the road */
+    if (b.lit){
+      const flick = 0.86 + 0.14 * Math.sin(now * 0.7 + b.ph);
+      for (let i = 0; i < b.win; i++){
+        const wy = (i - (b.win - 1) / 2) * (b.w * 0.36);
+        const z0 = b.h * 0.30, z1 = b.h * 0.66, ww = 0.66;
+        poly3([c(-hd - 0.03, wy - ww, z0), c(-hd - 0.03, wy + ww, z0),
+               c(-hd - 0.03, wy + ww, z1), c(-hd - 0.03, wy - ww, z1)],
+              'rgba(255,201,116,' + (0.97 * flick).toFixed(3) + ')');
+        const g = proj(b.p - T.p * hd - N.p * 0, b.v - T.v * hd + N.v * wy, b.h * 0.48);
+        ctx.globalCompositeOperation = 'lighter';
+        glow(g.x, g.y, Math.max(4, 44 * g.s), 'rgba(255,182,88,' + (0.34 * flick).toFixed(3) + ')',
+             'rgba(255,160,60,0)');
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    }
+  }
+
+  /* one pole light — the village's entire infrastructure */
+  if (VLAMP){
+    const b = proj(VLAMP.p, VLAMP.v, 0), t = proj(VLAMP.p, VLAMP.v, VLAMP.h);
+    if (b.y > horizonY() - 20 && onScreen(b, 240)){
+      ctx.strokeStyle = 'rgba(52,58,58,0.9)'; ctx.lineWidth = Math.max(0.8, 2.0 * b.s);
+      ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(t.x, t.y); ctx.stroke();
+      ctx.globalCompositeOperation = 'lighter';
+      glow(t.x, t.y, Math.max(5, 60 * t.s), 'rgba(255,196,112,0.50)', 'rgba(255,170,70,0)');
+      glow(b.x, b.y, Math.max(6, 120 * b.s), 'rgba(255,184,90,0.14)', 'rgba(255,160,60,0)');
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  }
+
+  /* a faint warm haze so the cluster reads as one inhabited place */
+  if (VCEN){
+    const c = proj(VCEN.p, VCEN.v, 5);
+    if (onScreen(c, 280)){
+      ctx.globalCompositeOperation = 'lighter';
+      glow(c.x, c.y, Math.max(24, 190 * c.s), 'rgba(255,176,92,0.055)', 'rgba(255,150,60,0)');
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  }
+}
+
+/* ------------------------------------------------- roadside furniture */
+function drawSign(){
+  const P = CFG.EXIT - 34, V = -8.2;
+  const b = proj(P, V, 0), t = proj(P, V, 2.55);
+  ctx.strokeStyle = '#2e3532'; ctx.lineWidth = Math.max(1, 2.0 * b.s);
+  ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(t.x, t.y); ctx.stroke();
+  const bw = Math.max(46, 78 * t.s), bh = Math.max(21, 34 * t.s);
+  ctx.fillStyle = '#0a2415'; ctx.fillRect(t.x - bw / 2, t.y - bh, bw, bh);
+  ctx.strokeStyle = 'rgba(215,228,220,0.42)'; ctx.lineWidth = 1;
+  ctx.strokeRect(t.x - bw / 2 + 1.5, t.y - bh + 1.5, bw - 3, bh - 3);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(224,234,228,0.88)';
+  ctx.font = '600 ' + Math.round(Math.max(8, bh * 0.30)) + 'px ' + MONO;
+  ctx.fillText('SIRSA  2 km', t.x, t.y - bh * 0.55);
+  ctx.font = Math.round(Math.max(7, bh * 0.24)) + 'px ' + MONO;
+  ctx.fillStyle = 'rgba(224,234,228,0.5)';
+  ctx.fillText('VILLAGE ROAD', t.x, t.y - bh * 0.18);
+  ctx.textAlign = 'left';
+}
+function drawMilestone(){
+  const P = 210, V = -5.4;
+  const b = proj(P, V, 0), t = proj(P, V, 0.95);
+  const w = Math.max(4, 9 * b.s);
+  ctx.fillStyle = 'rgba(206,204,192,0.55)';
+  ctx.fillRect(t.x - w / 2, t.y, w, b.y - t.y);
+  ctx.fillStyle = 'rgba(180,60,40,0.55)';
+  ctx.fillRect(t.x - w / 2, t.y, w, Math.max(1.5, (b.y - t.y) * 0.32));
+}
+function drawShop(){
+  const P = 1120, V = -13.5;
+  const b = proj(P, V, 0), t = proj(P + 7, V, 3.4);
+  const x0 = Math.min(b.x, t.x), x1 = Math.max(b.x, t.x);
+  ctx.fillStyle = '#0a0c0d';
+  ctx.fillRect(x0, t.y, Math.max(5, x1 - x0), Math.max(3, b.y - t.y));
+  ctx.strokeStyle = 'rgba(70,62,48,0.5)'; ctx.lineWidth = 1;
+  ctx.strokeRect(x0 + .5, t.y + .5, Math.max(5, x1 - x0) - 1, Math.max(3, b.y - t.y) - 1);
+  ctx.globalCompositeOperation = 'lighter';
+  const lp = proj(P + 3.5, V + 1.4, 3.1);
+  glow(lp.x, lp.y, Math.max(3, 26 * lp.s), 'rgba(255,190,110,0.30)', 'rgba(255,170,70,0)');
+  ctx.globalCompositeOperation = 'source-over';
+}
+function drawFlora(){
+  for (const f of FLORA){
+    const b = proj(f.p, f.v, 0), t = proj(f.p, f.v, f.h);
+    const hgt = b.y - t.y;
+    if (hgt < 1.2 || t.y < horizonY() - 40 || !onScreen(b, 160)) continue;
+    const w = Math.max(1.5, f.w * VIEW.LAT * b.s);
+    if (f.tree){
+      ctx.strokeStyle = '#080a0a'; ctx.lineWidth = Math.max(1, w * 0.16);
+      ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(t.x, t.y + hgt * 0.34); ctx.stroke();
+      ctx.fillStyle = '#070909';
+      const cy = t.y + hgt * 0.30, cr = w * 0.62;
+      ctx.beginPath();
+      ctx.arc(t.x, cy, cr, 0, 7);
+      ctx.arc(t.x - cr * 0.65, cy + cr * 0.32, cr * 0.72, 0, 7);
+      ctx.arc(t.x + cr * 0.6, cy + cr * 0.28, cr * 0.66, 0, 7);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = '#080a0a';
+      ctx.beginPath();
+      ctx.ellipse(b.x, b.y - hgt * 0.42, w * 0.55, hgt * 0.52, 0, 0, 7);
+      ctx.fill();
+    }
+  }
+}
+
+/* ---------------------------------------------------------- smoke haze */
+function drawSmoke(){
+  if (!SMOKE.length) return;
+  ctx.globalCompositeOperation = 'source-over';
+  for (const s of SMOKE){
+    const q = proj(s.p, s.v, s.h);
+    if (q.y < horizonY() - 60 || !onScreen(q, 160)) continue;
+    const age = s.age / s.life;
+    const a = 0.20 * Math.sin(Math.PI * Math.min(1, age * 1.15));
+    if (a <= 0.002) continue;
+    glow(q.x, q.y, Math.max(2, s.r * VIEW.LAT * q.s * 1.5),
+         'rgba(150,150,148,' + a.toFixed(3) + ')', 'rgba(120,120,118,0)');
+  }
+}
+
+
+/* ============================================================
+   VEHICLES — simple low-poly silhouettes, lights do the work
+   ============================================================ */
+function vehAxis(v, dir){
+  if (v.state === 'exit'){ const T = branchTan(v.bs); return { p: T.p, v: T.v }; }
+  return { p: dir, v: 0 };
+}
+
+/* one extruded box: 4 base corners at h0 and h1, painted far-face first */
+function drawBox(cp, cvv, T, N, off, len, hw, h0, h1, rgb, lit){
+  const bp = cp + T.p * off, bv = cvv + T.v * off, hl = len / 2;
+  const corner = function(sl, sw){
+    return { p: bp + T.p * hl * sl + N.p * hw * sw, v: bv + T.v * hl * sl + N.v * hw * sw };
+  };
+  const c = [corner(1, -1), corner(1, 1), corner(-1, 1), corner(-1, -1)];
+  const lo = c.map(function(q){ return proj(q.p, q.v, h0); });
+  const hi = c.map(function(q){ return proj(q.p, q.v, h1); });
+  const face = function(i, j, fill){
+    ctx.beginPath();
+    ctx.moveTo(lo[i].x, lo[i].y); ctx.lineTo(lo[j].x, lo[j].y);
+    ctx.lineTo(hi[j].x, hi[j].y); ctx.lineTo(hi[i].x, hi[i].y);
+    ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+  };
+  /* order by depth along p so the near face lands last */
+  const order = [[0, 1, 0.20], [1, 2, 0.30], [3, 0, 0.26], [2, 3, 0.24]];
+  order.sort(function(a, b){
+    const pa = (c[a[0]].p + c[a[1]].p) / 2, pb = (c[b[0]].p + c[b[1]].p) / 2;
+    return pb - pa;
+  });
+  for (const f of order) face(f[0], f[1], shade(rgb, f[2] * lit));
+  /* roof */
+  ctx.beginPath();
+  ctx.moveTo(hi[0].x, hi[0].y);
+  for (let i = 1; i < 4; i++) ctx.lineTo(hi[i].x, hi[i].y);
+  ctx.closePath();
+  ctx.fillStyle = shade(rgb, 0.40 * lit); ctx.fill();
+  ctx.strokeStyle = shade(rgb, 0.62 * lit, 0.85);
+  ctx.lineWidth = Math.max(0.6, 1.1 * proj(bp, bv, 0).s * 1.4);
+  ctx.stroke();
+}
+
+function lamp(v, T, N, spec, h, col, rad, bright){
+  const q = proj(v.p + T.p * spec[0] + N.p * spec[1],
+                 v.voff + T.v * spec[0] + N.v * spec[1], h);
+  ctx.globalCompositeOperation = 'lighter';
+  glow(q.x, q.y, rad, col, col.replace(/[\d.]+\)$/, '0)'));
+  ctx.globalCompositeOperation = 'source-over';
+  return q;
+}
+
+function drawVehicle(v, dir){
+  const base = proj(v.p, v.voff, 0.6);
+  if (base.y < horizonY() - 4 || !onScreen(base, 260)) return;
+  const s = base.s, T = vehAxis(v, dir), N = { p: -T.v, v: T.p };
+  const Ty = v.T, rgb = hex2rgb(v.col);
+  const crashed = v.state === 'crash';
+
+  /* headlight pool thrown down the road */
+  ctx.globalCompositeOperation = 'lighter';
+  const f = 46, n1 = proj(v.p + T.p * 2 - N.p * 1.5, v.voff + T.v * 2 - N.v * 1.5, 0);
+  const n2 = proj(v.p + T.p * 2 + N.p * 1.5, v.voff + T.v * 2 + N.v * 1.5, 0);
+  const f1 = proj(v.p + T.p * f - N.p * 4.6, v.voff + T.v * f - N.v * 4.6, 0);
+  const f2 = proj(v.p + T.p * f + N.p * 4.6, v.voff + T.v * f + N.v * 4.6, 0);
+  const lg = ctx.createLinearGradient(n1.x, n1.y, f1.x, f1.y);
+  const dm = crashed ? 0.05 : 0.30;
+  lg.addColorStop(0, 'rgba(255,216,152,' + dm + ')');
+  lg.addColorStop(0.45, 'rgba(255,200,124,' + (dm * 0.40).toFixed(3) + ')');
+  lg.addColorStop(1, 'rgba(255,188,98,0)');
+  ctx.fillStyle = lg;
+  ctx.beginPath(); ctx.moveTo(n1.x, n1.y); ctx.lineTo(f1.x, f1.y);
+  ctx.lineTo(f2.x, f2.y); ctx.lineTo(n2.x, n2.y); ctx.closePath(); ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+
+  /* body */
+  const lit = crashed ? 0.55 : 1;
+  for (const b of Ty.box) drawBox(v.p, v.voff, T, N, b[0], b[1], b[2], b[3], b[4], rgb, lit);
+
+  /* lamps */
+  const flare = v.brake || 0;
+  if (dir > 0 || v.state === 'exit'){
+    for (const tl of Ty.tail){
+      const r = Math.max(2.5, (26 + 30 * flare) * s);
+      const a = (0.42 + 0.46 * flare).toFixed(2);
+      const q = lamp(v, T, N, tl, tl[2], 'rgba(255,46,26,' + a + ')', r);
+      ctx.fillStyle = flare > 0.35 ? 'rgba(255,150,130,0.95)' : 'rgba(255,110,86,0.85)';
+      const d = Math.max(1, 1.5 * s * 1.6);
+      ctx.fillRect(q.x - d / 2, q.y - d / 2, d, d);
+      /* wet-road reflection */
+      const rh = Math.max(3, (34 + 26 * flare) * s);
+      const rgd = ctx.createLinearGradient(q.x, q.y, q.x, q.y + rh);
+      rgd.addColorStop(0, 'rgba(255,48,26,' + (0.16 + 0.18 * flare).toFixed(2) + ')');
+      rgd.addColorStop(1, 'rgba(255,40,20,0)');
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = rgd;
+      ctx.fillRect(q.x - Math.max(1, 8 * s), q.y, Math.max(2, 16 * s), rh);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  } else {
+    for (const hl of Ty.head){
+      const q = lamp(v, T, N, hl, hl[2], 'rgba(226,238,255,0.44)', Math.max(3, 46 * s));
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      const d = Math.max(1.2, 1.8 * s * 1.6);
+      ctx.fillRect(q.x - d / 2, q.y - d / 2, d, d);
+    }
+  }
+  if (Ty.marker){
+    for (const m of Ty.marker){
+      lamp(v, T, N, m, m[2], 'rgba(255,176,60,0.30)', Math.max(2, 12 * s));
+    }
+  }
+
+  /* hazard flashers on the wreck; indicator on the turning vehicle */
+  const blink = Math.sin((v.blink || 0) * 7) > 0;
+  if (crashed && blink){
+    glow(base.x, base.y, Math.max(5, 74 * s), 'rgba(255,168,20,0.5)', 'rgba(255,140,0,0)');
+  }
+  if (v.halt > S.t && blink){
+    glow(base.x, base.y, Math.max(4, 46 * s), 'rgba(255,168,20,0.42)', 'rgba(255,140,0,0)');
+  }
+  if ((v.state === 'exit' || v.fate === 'exit') && blink){
+    const q = proj(v.p - T.p * Ty.len * 0.45 - N.p * (Ty.wid * 0.55),
+                   v.voff - T.v * Ty.len * 0.45 - N.v * (Ty.wid * 0.55), 0.9);
+    ctx.globalCompositeOperation = 'lighter';
+    glow(q.x, q.y, Math.max(3, 24 * s), 'rgba(255,176,36,0.9)', 'rgba(255,150,0,0)');
+    ctx.globalCompositeOperation = 'source-over';
+  }
+}
+
+/* small colour-coded track tag, only for the nearest few in the segment */
+function drawTrackTags(){
+  for (const v of S.veh){
+    if (!v.trk || v.p < CFG.PA - 8 || v.p > CFG.PB + 8) continue;
+    const q = proj(v.p, v.voff, v.T.box[v.T.box.length - 1][4] + 0.4);
+    if (q.s < 0.24 || q.y < horizonY() || !onScreen(q, 40)) continue;
+    const focus = S.focusVeh === v;
+    ctx.font = (focus ? '700 ' : '') + '9px ' + MONO;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = focus ? '#B2ECF6' : v.col;
+    ctx.globalAlpha = focus ? 1 : 0.75;
+    ctx.fillText(v.trk.slice(4), q.x, q.y - 4);
+    ctx.globalAlpha = 1;
+    if (focus){
+      ctx.strokeStyle = 'rgba(150,220,235,0.5)'; ctx.lineWidth = 1;
+      const r = Math.max(6, 18 * q.s);
+      const c = proj(v.p, v.voff, 0.8);
+      ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, 7); ctx.stroke();
+    }
+    ctx.textAlign = 'left';
+  }
+}
+
+/* ------------------------------------------------ pods / poles / tower */
+function podTop(pd){ return proj(pd.p, pd.v + 2.6, pd.h - 0.4); }
+
+/* ============================================================
+   THE POD — the product, and the most detailed object in the scene.
+   Built from projected quads: housing, angled dot-matrix face, tilted
+   solar panel, sensor snout, pole clamp. No models, no loaders.
+   ============================================================ */
+const GLY = {
+  'A':'01110100011000111111100011000110001','B':'11110100011000111110100011000111110',
+  'C':'01110100011000010000100001000101110','D':'11110100011000110001100011000111110',
+  'E':'11111100001000011110100001000011111','F':'11111100001000011110100001000010000',
+  'G':'01110100011000010111100011000101111','H':'10001100011000111111100011000110001',
+  'I':'01110001000010000100001000010001110','J':'00111000100001000010000110010011100',
+  'K':'10001100101010011000101001001010001','L':'10000100001000010000100001000011111',
+  'M':'10001110111010110101100011000110001','N':'10001110011010110011100011000110001',
+  'O':'01110100011000110001100011000101110','P':'11110100011000111110100001000010000',
+  'Q':'01110100011000110001101011001001101','R':'11110100011000111110101001001010001',
+  'S':'01111100001000001110000010000111110','T':'11111001000010000100001000010000100',
+  'U':'10001100011000110001100011000101110','V':'10001100011000110001100010101000100',
+  'W':'10001100011000110101101011101110001','X':'10001100010101000100010101000110001',
+  'Y':'10001100010101000100001000010000100','Z':'11111000010001000100010001000011111',
+  '0':'01110100011001110101110011000101110','1':'00100011000010000100001000010001110',
+  '2':'01110100010000100010001000100011111','3':'11111000100010000010000011000101110',
+  '4':'00010001100101010010111110001000010','5':'11111100001111000001000011000101110',
+  '6':'00110010001000011110100011000101110','7':'11111000010001000100010000100001000',
+  '8':'01110100011000101110100011000101110','9':'01110100011000101111000010001001100',
+  ' ':'00000000000000000000000000000000000','>':'00000010000010000001001000100000000',
+  '/':'00001000100001000100010000100010000','-':'00000000000000001110000000000000000',
+  '.':'00000000000000000000000000000000100','·':'00000000000000000010000000000000000'
+};
+const POD_BODY = [92, 100, 102];
+
+function proj3(q){ return proj(q.p, q.v, q.h); }
+function bilerp(TL, TR, BL, BR, u, w){
+  const tx = TL.x + (TR.x - TL.x) * u, ty = TL.y + (TR.y - TL.y) * u;
+  const bx = BL.x + (BR.x - BL.x) * u, by = BL.y + (BR.y - BL.y) * u;
+  return { x: tx + (bx - tx) * w, y: ty + (by - ty) * w };
+}
+
+/* the amber dot-matrix readout, drawn onto the projected face plane */
+function drawMatrix(o, T, N, face){
+  const X = -0.502, y0 = -1.08, y1 = 1.08, z0 = -0.34, z1 = 0.40;
+  const TL = proj3(LP(o, T, N, X, y0, z1)), TR = proj3(LP(o, T, N, X, y1, z1));
+  const BL = proj3(LP(o, T, N, X, y0, z0)), BR = proj3(LP(o, T, N, X, y1, z0));
+  poly3([LP(o, T, N, X, y0, z0), LP(o, T, N, X, y1, z0),
+         LP(o, T, N, X, y1, z1), LP(o, T, N, X, y0, z1)], '#0b0803',
+        'rgba(20,16,6,0.9)', 1);
+
+  const txt = String(face || '').slice(0, 8).toUpperCase();
+  const cols = Math.max(1, txt.length * 6 - 1), rows = 7;
+  const pw = Math.hypot(TR.x - TL.x, TR.y - TL.y);
+  const dot = pw / cols;
+
+  ctx.globalCompositeOperation = 'lighter';
+  if (dot < 0.55){
+    /* too far to resolve individual pixels: an amber wash, as a real sign looks */
+    poly3([LP(o, T, N, X, y0, z0), LP(o, T, N, X, y1, z0),
+           LP(o, T, N, X, y1, z1), LP(o, T, N, X, y0, z1)], 'rgba(245,179,1,0.42)');
+    ctx.globalCompositeOperation = 'source-over';
+    return;
+  }
+  const ds = Math.max(0.55, dot * 0.80);
+  for (let ci = 0; ci < txt.length; ci++){
+    const g = GLY[txt[ci]] || GLY[' '];
+    for (let r = 0; r < rows; r++){
+      for (let c = 0; c < 5; c++){
+        const on = g.charCodeAt(r * 5 + c) === 49;
+        if (!on && dot < 1.1) continue;
+        const u = (ci * 6 + c + 0.5) / cols, w = (r + 0.5) / rows;
+        const q = bilerp(TL, TR, BL, BR, u, w);
+        ctx.fillStyle = on ? 'rgba(255,190,30,0.95)' : 'rgba(96,70,8,0.30)';
+        ctx.fillRect(q.x - ds / 2, q.y - ds / 2, ds, ds);
+      }
+    }
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function drawPod(pd, label){
+  const base = proj(pd.p, pd.v, 0);
+  if (base.y < horizonY() - 40 || !onScreen(base, 320)) return;
+  const MH = pd.h - 0.4;                       // mount height
+  const o = { p: pd.p, v: pd.v + 2.6, h: MH }; // housing centre
+  const fr = yawFrame(-0.42);                  // display angled toward oncoming traffic
+  const T = fr.T, N = fr.N;                    // +x down-road, +y toward the carriageway
+  const c = function(x, y, z){ return LP(o, T, N, x, y, z); };
+  const B = POD_BODY;
+
+  /* ---- pole and clamp bracket ---- */
+  const pw = 0.10;
+  poly3([{ p: pd.p - pw, v: pd.v - pw, h: 0 }, { p: pd.p - pw, v: pd.v + pw, h: 0 },
+         { p: pd.p - pw, v: pd.v + pw, h: pd.h }, { p: pd.p - pw, v: pd.v - pw, h: pd.h }],
+        shade(B, 0.26));
+  poly3([{ p: pd.p - pw, v: pd.v + pw, h: 0 }, { p: pd.p + pw, v: pd.v + pw, h: 0 },
+         { p: pd.p + pw, v: pd.v + pw, h: pd.h }, { p: pd.p - pw, v: pd.v + pw, h: pd.h }],
+        shade(B, 0.17));
+  /* two clamp bands wrapping the pole */
+  for (const bz of [MH + 0.30, MH - 0.30]){
+    const bw = 0.20;
+    poly3([{ p: pd.p - bw, v: pd.v - bw, h: bz - 0.09 }, { p: pd.p - bw, v: pd.v + bw, h: bz - 0.09 },
+           { p: pd.p - bw, v: pd.v + bw, h: bz + 0.09 }, { p: pd.p - bw, v: pd.v - bw, h: bz + 0.09 }],
+          shade(B, 0.44), shade(B, 0.60, 0.7), 1);
+    poly3([{ p: pd.p - bw, v: pd.v + bw, h: bz - 0.09 }, { p: pd.p + bw, v: pd.v + bw, h: bz - 0.09 },
+           { p: pd.p + bw, v: pd.v + bw, h: bz + 0.09 }, { p: pd.p - bw, v: pd.v + bw, h: bz + 0.09 }],
+          shade(B, 0.30));
+  }
+  /* arm out to the housing */
+  poly3([{ p: pd.p - 0.07, v: pd.v, h: MH - 0.07 }, { p: pd.p - 0.07, v: o.v, h: MH - 0.07 },
+         { p: pd.p - 0.07, v: o.v, h: MH + 0.07 }, { p: pd.p - 0.07, v: pd.v, h: MH + 0.07 }],
+        shade(B, 0.30));
+
+  const HD = 0.50, HW = 1.30, HZ = 0.72;
+  const wpx = Math.hypot(proj3(c(-HD, HW, 0)).x - proj3(c(-HD, -HW, 0)).x,
+                         proj3(c(-HD, HW, 0)).y - proj3(c(-HD, -HW, 0)).y);
+
+  if (wpx < 11){
+    /* far away: silhouette only, so it never turns into noise */
+    poly3([c(-HD, -HW, -HZ), c(-HD, HW, -HZ), c(-HD, HW, HZ), c(-HD, -HW, HZ)], shade(B, 0.24));
+    poly3([c(-HD, -HW, HZ), c(-HD, HW, HZ), c(HD, HW, HZ), c(HD, -HW, HZ)], shade(B, 0.40));
+    drawMatrix(o, T, N, pd.face);
+  } else {
+    /* ---- housing: painter-ordered faces ---- */
+    poly3([c(-HD, -HW, -HZ), c(HD, -HW, -HZ), c(HD, HW, -HZ), c(-HD, HW, -HZ)], shade(B, 0.07));
+    poly3([c(HD, -HW, -HZ), c(HD, HW, -HZ), c(HD, HW, HZ), c(HD, -HW, HZ)], shade(B, 0.13));
+    const sideA = [c(-HD, -HW, -HZ), c(HD, -HW, -HZ), c(HD, -HW, HZ), c(-HD, -HW, HZ)];
+    const sideB = [c(-HD, HW, -HZ), c(HD, HW, -HZ), c(HD, HW, HZ), c(-HD, HW, HZ)];
+    const yA = proj3(c(0, -HW, 0)).y, yB = proj3(c(0, HW, 0)).y;
+    if (yA < yB){ poly3(sideA, shade(B, 0.16)); poly3(sideB, shade(B, 0.23)); }
+    else        { poly3(sideB, shade(B, 0.23)); poly3(sideA, shade(B, 0.16)); }
+    /* lit top surface */
+    poly3([c(-HD, -HW, HZ), c(HD, -HW, HZ), c(HD, HW, HZ), c(-HD, HW, HZ)],
+          shade(B, 0.44), shade(B, 0.58, 0.5), 1);
+    /* front bezel, carrying the display */
+    poly3([c(-HD, -HW, -HZ), c(-HD, HW, -HZ), c(-HD, HW, HZ), c(-HD, -HW, HZ)],
+          shade(B, 0.27), shade(B, 0.46, 0.6), 1);
+
+    /* ---- sensor snout on the carriageway-facing edge ---- */
+    const s0 = HW, s1 = HW + 0.30;
+    poly3([c(-0.30, s0, -0.18), c(0.10, s0, -0.18), c(0.10, s1, -0.18), c(-0.30, s1, -0.18)], shade(B, 0.12));
+    poly3([c(-0.30, s0, 0.18), c(0.10, s0, 0.18), c(0.10, s1, 0.18), c(-0.30, s1, 0.18)], shade(B, 0.40));
+    poly3([c(-0.30, s0, -0.18), c(-0.30, s1, -0.18), c(-0.30, s1, 0.18), c(-0.30, s0, 0.18)], shade(B, 0.30));
+    poly3([c(-0.30, s1, -0.18), c(0.10, s1, -0.18), c(0.10, s1, 0.18), c(-0.30, s1, 0.18)],
+          '#07090a', shade(B, 0.50, 0.55), 1);
+    const ap = proj3(c(-0.10, s1 + 0.01, 0));
+    ctx.globalCompositeOperation = 'lighter';
+    glow(ap.x, ap.y, Math.max(1.2, wpx * 0.10), 'rgba(150,190,220,0.30)', 'rgba(120,160,200,0)');
+    ctx.globalCompositeOperation = 'source-over';
+
+    drawMatrix(o, T, N, pd.face);
+
+    /* ---- solar panel, tilted back over the housing ---- */
+    const pz = function(x){ return 0.80 + 0.24 * (0.80 - x) / 1.50; };
+    const P1 = c(-0.70, -1.42, pz(-0.70)), P2 = c(-0.70, 1.42, pz(-0.70));
+    const P3 = c(0.80, 1.42, pz(0.80)),   P4 = c(0.80, -1.42, pz(0.80));
+    poly3([P1, P2, P3, P4], 'rgba(16,22,34,0.98)', 'rgba(130,145,160,0.55)', 1);
+    if (wpx > 16){
+      /* cell grid + a faint sheen so it reads as glass, not a black slab */
+      const a = proj3(P1), b = proj3(P2), d2 = proj3(P4), e = proj3(P3);
+      ctx.strokeStyle = 'rgba(120,140,170,0.20)'; ctx.lineWidth = 0.7;
+      for (let i = 1; i < 4; i++){
+        const u = i / 4;
+        const q0 = { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u };
+        const q1 = { x: d2.x + (e.x - d2.x) * u, y: d2.y + (e.y - d2.y) * u };
+        ctx.beginPath(); ctx.moveTo(q0.x, q0.y); ctx.lineTo(q1.x, q1.y); ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.moveTo((a.x + b.x) / 2, (a.y + b.y) / 2);
+      ctx.lineTo((d2.x + e.x) / 2, (d2.y + e.y) / 2);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(180,200,230,0.16)'; ctx.lineWidth = 1.1;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    /* status LED on the bezel corner */
+    const led = proj3(c(-HD - 0.02, -HW + 0.14, HZ - 0.14));
+    const alive = Math.sin(performance.now() / 900) > -0.2;
+    ctx.globalCompositeOperation = 'lighter';
+    glow(led.x, led.y, Math.max(1.2, wpx * 0.07),
+         alive ? 'rgba(90,230,150,0.75)' : 'rgba(90,230,150,0.18)', 'rgba(60,200,120,0)');
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  /* ---- amber spill from the display onto the housing and the air ---- */
+  const dc = proj3(c(-0.55, 0, 0.02));
+  ctx.globalCompositeOperation = 'lighter';
+  glow(dc.x, dc.y, Math.max(6, wpx * 1.5), 'rgba(245,179,1,0.16)', 'rgba(245,179,1,0)');
+  ctx.globalCompositeOperation = 'source-over';
+
+  /* ---- readable label beside the pod ---- */
+  const anchor = proj3(c(-HD, HW, HZ));
+  const lx = anchor.x + 11, ly = anchor.y - 6;
+  ctx.strokeStyle = 'rgba(245,179,1,0.30)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(anchor.x + 1, anchor.y); ctx.lineTo(lx - 3, ly + 2); ctx.stroke();
+  ctx.textAlign = 'left';
+  ctx.font = '700 11px ' + MONO; ctx.fillStyle = '#F5B301';
+  ctx.fillText(label, lx, ly + 4);
+  ctx.font = '10px ' + MONO;
+  const tw = ctx.measureText(pd.face).width;
+  ctx.fillStyle = 'rgba(10,7,3,0.9)'; ctx.fillRect(lx - 2, ly + 8, tw + 8, 13);
+  ctx.strokeStyle = '#3a2c05'; ctx.strokeRect(lx - 1.5, ly + 8.5, tw + 7, 12);
+  ctx.fillStyle = '#F5B301'; ctx.fillText(pd.face, lx + 2, ly + 18);
+}
+
+function drawTower(){
+  const b = proj(TOWER.p, TOWER.v, 0), t = proj(TOWER.p, TOWER.v, TOWER.h);
+  const hgt = b.y - t.y;
+  if (hgt < 4) return;
+  ctx.strokeStyle = '#2f3634'; ctx.lineWidth = 1;
+  const halfB = Math.max(3, 46 * b.s), halfT = Math.max(1, halfB * 0.22);
+  ctx.beginPath();
+  ctx.moveTo(b.x - halfB, b.y); ctx.lineTo(t.x - halfT, t.y);
+  ctx.moveTo(b.x + halfB, b.y); ctx.lineTo(t.x + halfT, t.y);
+  ctx.stroke();
+  for (let i = 0; i <= 8; i++){
+    const f = i / 8, y = b.y - hgt * f, hw = halfB + (halfT - halfB) * f;
+    ctx.beginPath(); ctx.moveTo(t.x - hw, y); ctx.lineTo(t.x + hw, y); ctx.stroke();
+  }
+  const beacon = Math.sin(performance.now() / 520) > 0.4;
+  ctx.globalCompositeOperation = 'lighter';
+  glow(t.x, t.y - 2, beacon ? 12 : 6,
+       beacon ? 'rgba(255,60,45,0.9)' : 'rgba(255,60,45,0.3)', 'rgba(255,40,20,0)');
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function drawPulse(){
+  if (!TX.on) return;
+  const pts = relayPods().map(podTop);
+  pts.push(proj(TOWER.p, TOWER.v, TOWER.h - 4));
+  const e = performance.now() / 1000 - TX.t0, HOP = 0.85;
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < pts.length - 1; i++){
+    const st = i * HOP, fr = (e - st) / HOP;
+    if (fr <= 0) continue;
+    const a = pts[i], b = pts[i + 1], done = Math.min(1, fr);
+    ctx.strokeStyle = 'rgba(245,179,1,' + (0.14 + 0.18 * (1 - Math.min(1, (e - st) / 3))).toFixed(3) + ')';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y);
+    ctx.lineTo(a.x + (b.x - a.x) * done, a.y + (b.y - a.y) * done); ctx.stroke();
+    if (fr < 1) glow(a.x + (b.x - a.x) * fr, a.y + (b.y - a.y) * fr, 12,
+                     'rgba(255,236,180,0.95)', 'rgba(245,179,1,0)');
+    else glow(b.x, b.y, 7 + 4 * Math.abs(Math.sin(e * 5)), 'rgba(245,179,1,0.6)', 'rgba(245,179,1,0)');
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* ------------------------------------------- thin transmission strip */
+function stripChip(x, y, txt, on, col){
+  ctx.font = '700 9.5px ' + MONO;
+  const w = ctx.measureText(txt).width + 12, h = 16;
+  ctx.fillStyle = on ? 'rgba(40,29,2,0.95)' : 'rgba(14,18,19,0.85)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = on ? (col || '#F5B301') : '#2a3234'; ctx.lineWidth = 1;
+  ctx.strokeRect(x + .5, y + .5, w - 1, h - 1);
+  ctx.fillStyle = on ? (col || '#F5B301') : '#4d5658';
+  ctx.textAlign = 'center'; ctx.fillText(txt, x + w / 2, y + 11); ctx.textAlign = 'left';
+  return x + w;
+}
+function stripArrow(x, y, label, on){
+  ctx.font = '9px ' + MONO;
+  const w = Math.max(34, ctx.measureText(label).width + 12);
+  ctx.strokeStyle = on ? '#F5B301' : '#2a3234'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x + 3, y + 8); ctx.lineTo(x + w - 4, y + 8); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x + w - 8, y + 5); ctx.lineTo(x + w - 4, y + 8);
+  ctx.lineTo(x + w - 8, y + 11); ctx.stroke();
+  if (label){
+    ctx.fillStyle = on ? '#F5B301' : '#3f4749';
+    ctx.textAlign = 'center'; ctx.fillText(label, x + w / 2, y + 4); ctx.textAlign = 'left';
+  }
+  return x + w;
+}
+function drawLinkStrip(){
+  const a = TX.alpha();
+  if (a <= 0.01) return;
+  const SH = 30, y0 = H - SH - 8, x0 = 14, x1 = W - 14;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(5,7,8,0.92)'; ctx.fillRect(x0, y0, x1 - x0, SH);
+  ctx.strokeStyle = '#3a2c05'; ctx.lineWidth = 1;
+  ctx.strokeRect(x0 + .5, y0 + .5, x1 - x0 - 1, SH - 1);
+  const cy = y0 + 7;
+  let x = x0 + 10;
+  const chain = relayPods();
+  for (let i = 0; i < chain.length; i++){
+    const on = i === 0 ? true : (TX.hops[i - 1] && TX.hops[i - 1].lit);
+    x = stripChip(x, cy, chain[i].id, on);
+    const hp = TX.hops[i];
+    if (hp) x = stripArrow(x, cy, hp.lit ? hp.ms + 'ms' : '', hp.lit);
+  }
+  const twOn = TX.hops.length && TX.hops[TX.hops.length - 1].lit;
+  x = stripChip(x, cy, TOWER.id, twOn, '#FF6A5F');
+  x = stripArrow(x, cy, '', twOn) + 4;
+  for (let i = 0; i < TX.recv.length; i++){
+    const r = TX.recv[i];
+    ctx.fillStyle = r.lit ? '#FF3B2F' : '#2c3436';
+    ctx.fillRect(x, cy + 5, 6, 6);
+    ctx.font = '9.5px ' + MONO;
+    ctx.fillStyle = r.lit ? '#FF6A5F' : '#454e50';
+    ctx.fillText(r.s, x + 11, cy + 11);
+    x += 13 + ctx.measureText(r.s).width + 12;
+  }
+  ctx.font = '9.5px ' + MONO;
+  ctx.fillStyle = TX.done ? '#F5B301' : '#5d6668';
+  ctx.textAlign = 'right';
+  ctx.fillText(TX.done ? 'END-TO-END ' + (TX.baseAcc + TX.recv[2].ms) + ' ms' : 'DISPATCHING…',
+               x1 - 10, cy + 11);
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+
+/* ============================================================
+   TRANSMISSION — the alert leaving the road.
+   Expanding rings from the originating pod, relayed hop by hop with a
+   visible delay, a wider handoff wave at the tower, then three separate
+   paths out to the recipients. The origin keeps calling while the
+   incident stands.
+   ============================================================ */
+const HOP_S = 0.85;
+
+function towerTop(){ return proj(TOWER.p, TOWER.v, TOWER.h - 2); }
+
+/* concentric rings expanding from a point, flattened to sit on the ground plane */
+function ringSet(pt, dt, o){
+  /* rings are diagrammatic, so they only partly follow the zoom — otherwise a
+     push-in turns them into screen-filling strokes */
+  const zs = 1 + (CAM.z - 1) * 0.45;
+  if (!onScreen(pt, o.r1 * zs)) return;
+  for (let i = 0; i < o.n; i++){
+    const a = dt - i * o.gap;
+    if (a <= 0 || a > o.life) continue;
+    const f = a / o.life;
+    const r = (o.r0 + (o.r1 - o.r0) * f) * zs;
+    const al = (1 - f) * (1 - f) * o.a;
+    if (al < 0.004 || r < 1) continue;
+    ctx.strokeStyle = o.col + al.toFixed(3) + ')';
+    ctx.lineWidth = Math.max(0.6, o.lw * (1 - f * 0.55));
+    ctx.beginPath();
+    ctx.ellipse(pt.x, pt.y, r, r * 0.42, 0, 0, 6.2832);
+    ctx.stroke();
+  }
+}
+
+function recipAnchors(tp){
+  const d = Math.min(180, W * 0.12);
+  const a = [
+    { x: tp.x + d * 0.62, y: tp.y - d * 0.46 },
+    { x: tp.x + d * 0.98, y: tp.y - d * 0.02 },
+    { x: tp.x + d * 0.58, y: tp.y + d * 0.42 }
+  ];
+  for (let i = 0; i < 3; i++){
+    a[i].x = Math.min(a[i].x, W - 96);
+    a[i].y = clamp(a[i].y, 34, H - 140);
+    a[i].s = RECIP[i].s;
+  }
+  return a;
+}
+
+function drawTxNetwork(){
+  const now = performance.now() / 1000;
+  const sus = ANTAR.sus;
+  const calling = !!(sus && sus.settled && sus.verdict === 'dispatch');
+  if (!calling && !TX.on) return;
+
+  ctx.globalCompositeOperation = 'lighter';
+
+  /* the road is still calling: a slow, steady beat from the originating pod */
+  if (calling){
+    const period = 2.6;
+    const beat = (now % period) / period;
+    ringSet(podTop(POD.A), beat * period,
+            { n: 1, gap: 0, life: period, r0: 9, r1: 132, a: 0.26, lw: 1.5,
+              col: 'rgba(245,179,1,' });
+  }
+
+  if (TX.on){
+    const e = now - TX.t0;
+    const chain = relayPods();
+
+    /* each pod fires its own ripple only once the wave has reached it */
+    for (let k = 0; k < chain.length; k++){
+      ringSet(podTop(chain[k]), e - k * HOP_S,
+              { n: 3, gap: 0.38, life: 1.5, r0: 7, r1: 104, a: 0.55, lw: 1.6,
+                col: 'rgba(255,206,96,' });
+    }
+
+    /* the handoff: wider, slower, a different colour temperature */
+    const tt = chain.length * HOP_S, tp = towerTop();
+    ringSet(tp, e - tt, { n: 3, gap: 0.50, life: 2.8, r0: 12, r1: 300, a: 0.46, lw: 2.1,
+                          col: 'rgba(255,138,78,' });
+    if (e > tt){
+      const flash = c01(1 - (e - tt) / 0.8);
+      if (flash > 0)
+        glow(tp.x, tp.y, (24 + 46 * flash) * (1 + (CAM.z - 1) * 0.45),
+             'rgba(255,158,96,' + (0.6 * flash).toFixed(3) + ')', 'rgba(255,120,60,0)');
+    }
+
+    /* three separate paths out, arriving one after another */
+    const anc = recipAnchors(tp);
+    for (let i = 0; i < anc.length; i++){
+      const st = tt + 0.30 + i * 0.55, a = e - st;
+      if (a <= 0) continue;
+      const f = c01(a / 0.52);
+      const hx = tp.x + (anc[i].x - tp.x) * f, hy = tp.y + (anc[i].y - tp.y) * f;
+      ctx.strokeStyle = 'rgba(255,120,74,' + (0.16 + 0.30 * (1 - f)).toFixed(3) + ')';
+      ctx.lineWidth = 1.3;
+      ctx.setLineDash([4, 5]);
+      ctx.beginPath(); ctx.moveTo(tp.x, tp.y); ctx.lineTo(hx, hy); ctx.stroke();
+      ctx.setLineDash([]);
+      if (f < 1){
+        glow(hx, hy, 11, 'rgba(255,206,150,0.9)', 'rgba(255,140,70,0)');
+      } else {
+        ringSet(anc[i], a - 0.52, { n: 2, gap: 0.34, life: 1.3, r0: 5, r1: 46,
+                                     a: 0.5, lw: 1.4, col: 'rgba(255,90,60,' });
+        glow(anc[i].x, anc[i].y, 9, 'rgba(255,120,80,0.55)', 'rgba(255,80,50,0)');
+      }
+    }
+
+    /* recipient labels sit on top, unblended, so they stay readable */
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.font = '700 9.5px ' + MONO;
+    for (let i = 0; i < anc.length; i++){
+      const st = tt + 0.30 + i * 0.55;
+      if (e - st < 0.52) continue;
+      const lit = TX.recv[i] && TX.recv[i].lit;
+      const tw = ctx.measureText(anc[i].s).width;
+      ctx.fillStyle = 'rgba(6,8,9,0.85)';
+      ctx.fillRect(anc[i].x + 8, anc[i].y - 7, tw + 10, 14);
+      ctx.strokeStyle = lit ? 'rgba(255,59,47,0.75)' : 'rgba(70,80,82,0.7)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(anc[i].x + 8.5, anc[i].y - 6.5, tw + 9, 13);
+      ctx.fillStyle = lit ? '#FF8A72' : '#5d6668';
+      ctx.fillText(anc[i].s, anc[i].x + 13, anc[i].y + 3);
+    }
+    ctx.globalCompositeOperation = 'lighter';
+  }
+
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* a whisper of a camera indicator, only when not in the default view */
+function drawCamBadge(){
+  if (CAM.mode === 'wide' && CAM.z === 1) return;
+  ctx.font = '9px ' + MONO;
+  ctx.fillStyle = 'rgba(90,100,102,0.8)';
+  ctx.textAlign = 'right';
+  ctx.fillText('CLOSE VIEW  ×' + CAM.z.toFixed(1), W - 14, 20);
+  ctx.textAlign = 'left';
+}
+
+/* ------------------------------------------------------------ compose */
+function render(){
+  ctx.clearRect(0, 0, W, H);
+  drawSky();
+  drawGround();
+  drawVillagePad();
+  drawBranch();
+  drawVillage();
+  drawFlora();
+  drawShop();
+  drawMilestone();
+  drawSign();
+
+  const all = [];
+  for (const v of S.veh) all.push({ v: v, d: 1 });
+  for (const o of S.onc) all.push({ v: o, d: -1 });
+  all.sort(function(a, b){ return b.v.p - a.v.p; });
+
+  if (POD.D.enabled) drawPod(POD.D, 'POD D');
+  if (POD.C.enabled) drawPod(POD.C, 'POD C');
+  drawTower();
+  drawPod(POD.B, 'POD B');
+  for (const e of all) drawVehicle(e.v, e.d);
+  drawSmoke();
+  drawPod(POD.A, 'POD A');
+  drawTrackTags();
+  drawPulse();
+  drawTxNetwork();
+  drawLinkStrip();
+  drawCamBadge();
+}
+
+
+/* ================================================================
+   CONSOLE — shows only what ANTAR actually perceives
+   ================================================================ */
+const $ = function(id){ return document.getElementById(id); };
+const LOGS = [];
+function logEvt(cls, text){
+  if (S.quiet) return;
+  LOGS.push({ t: S.t, c: cls, x: text });
+  if (LOGS.length > 220) LOGS.shift();
+}
+const TIER = ['LOW', 'MEDIUM', 'HIGH'];
+
+function row(k, v, c){
+  return '<div class="rowv"><em>' + k + '</em><b class="' + (c || '') + '">' + v + '</b></div>';
+}
+function stepHTML(st, collapsed){
+  let s = '<div class="step ' + st.cls + (collapsed ? ' col' : '') + '">' +
+          '<div class="ic">' + st.ic + '</div><div>' +
+          '<div class="hd"><span class="tt">' + st.tt + '</span><span class="ts">' + st.ts + '</span></div>';
+  if (!collapsed){
+    if (st.kv && st.kv.length){
+      s += '<div class="kv">';
+      for (const p of st.kv) s += '<span><em>' + p[0] + '</em> <b class="' + (p[2] || '') + '">' + p[1] + '</b></span>';
+      s += '</div>';
+    }
+    if (st.why) s += '<div class="why">' + st.why + '</div>';
+  }
+  return s + '</div></div>';
+}
+
+const UI = {
+  trk: null, sus: null, last: 0,
+
+  focus(trk){ this.trk = trk; this.sus = null; },
+  /* the tracked vehicle may open the segment event, or join one already open —
+     either way the checklist follows that event */
+  onSuspicion(s){
+    if (!this.trk || this.trk.state === 'closed') return;
+    if (s.trk === this.trk || s.extra.indexOf(this.trk) >= 0 || this.trk.state === 'missed')
+      this.sus = s;
+  },
+  onSettle(s){ },
+
+  /* ------------------------------------------------ decision checklist */
+  steps(){
+    const k = this.trk, t = S.t, out = [];
+    if (!k) return out;
+    const s = this.sus, D = k.dist;
+
+    out.push({ cls: 'ok', ic: '1', tt: 'VEHICLE DETECTED · POD A', ts: clk(k.tA), kv: [
+      ['TRACK', k.id, 'n'],
+      ['CLASS', k.cls + ' · ' + k.len.toFixed(1) + ' m', 'n'],
+      ['SPEED', kmh(k.vA).toFixed(1) + ' km/h']
+    ], why: 'POD A knows three things: something passed, how fast, and how long it was, plus its inductive signature. No plate, no camera, no destination. Every inference below is built from those numbers alone.' });
+
+    out.push({ cls: 'ok', ic: '2', tt: 'ARRIVAL WINDOW OPENED', ts: clk(k.tA), kv: [
+      ['TO POD B', D + ' m'],
+      ['ETA', clk(k.tExp) + ' (' + rel(k.tExp - k.tA) + ')'],
+      ['TOLERANCE', rel(k.tEarly - k.tA) + ' … ' + rel(k.tLate - k.tA), 'n'],
+      ['MATCH BY', 'WINDOW + CLASS + SIGNATURE', 'n']
+    ], why: 'Expected arrival at POD B from the measured speed. The window spans 0.55×–1.30× of that, because on a road shared by a bus, a tractor-trailer and a motorcycle, getting stuck behind something slow is normal and must not read as an incident.' });
+
+    if (k.state === 'open'){
+      out.push({ cls: 'pending live', ic: '3', tt: 'AWAITING POD B MATCH', ts: clk(t), kv: [
+        ['WINDOW LEFT', (k.tLate - t).toFixed(1) + ' s'],
+        ['ELAPSED', (t - k.tA).toFixed(1) + ' s', 'n']
+      ], why: 'A matching pass at POD B inside the window closes the track. Only an exhausted window with no match counts as an absence.' });
+      if (!s) return out;
+    } else if (k.state === 'closed'){
+      out.push({ cls: 'ok', ic: '3', tt: 'POD B MATCHED · TRACK CLOSED', ts: clk(k.tB), kv: [
+        ['ARRIVAL DELTA', rel(k.tB - k.tExp), 'g'],
+        ['POD B SPEED', kmh(k.vB).toFixed(1) + ' km/h'],
+        ['SIG DISTANCE', (k.dSig === null ? '—' : k.dSig.toFixed(3)) + ' / 0.160 gate', 'g'],
+        ['TRIP MEAN', kmh(D / (k.tB - k.tA)).toFixed(1) + ' km/h', 'n']
+      ], why: 'The vehicle arrived as predicted. No absence, no suspicion, no resources spent — this is the path almost every vehicle takes.' });
+      out.push({ cls: 'ok', ic: '4', tt: 'DECISION · NO ANOMALY', ts: clk(k.tB), kv: [
+        ['RESULT', 'NORMAL PASS', 'g'], ['DISPATCH', 'NONE', 'n']
+      ], why: 'The pass matched end to end. Nothing was raised, nothing was sent. A quiet system is a working system.' });
+      return out;
+    }
+
+    if (k.state === 'missed'){
+      out.push({ cls: 'warn', ic: '3', tt: 'WINDOW EXPIRED · NO MATCH AT POD B', ts: clk(k.tLate), kv: [
+        ['ABSENT FOR', (t - k.tLate).toFixed(1) + ' s'],
+        ['POD B MATCH', 'NONE', 'r']
+      ], why: 'An absence is not a crash. A turn-off to a village, a field track, a tea stall, a roadside halt — all of them look identical from POD A. To tell them apart, the road itself has to testify.' });
+    }
+
+    if (!s) return out;
+
+    const origin = s.trk === k;
+    out.push({ cls: 'warn', ic: '4', tt: 'SEGMENT EVENT OPENED', ts: clk(s.tOpen), kv: [
+      ['EVENT', s.evt, 'n'],
+      ['OPENED BY', s.trk.id + (origin ? ' (this track)' : ''), 'n'],
+      ['THIS TRACK', origin ? 'ORIGIN' : (k.state === 'open' ? 'IN SEGMENT' : 'JOINED'), 'n'],
+      ['DISPATCH', 'HELD', 'n']
+    ], why: 'An event belongs to the segment, not to one vehicle — whichever absence is noticed first opens it, and every later absence folds into the same event. One absence is not enough to wake anyone up, so ANTAR does exactly one thing here: it starts watching the traffic behind.' });
+
+    const remain = Math.max(0, s.tClose - t);
+    out.push({ cls: s.settled ? 'dead' : 'live warn', ic: '5',
+      tt: 'CORROBORATION WINDOW · UP TO ' + CFG.CORROB + ' s',
+      ts: s.settled ? clk(s.tSettle) : clk(t),
+      kv: s.settled ? [['CLOSED AFTER', (s.tSettle - s.tOpen).toFixed(1) + ' s', 'n'],
+                       ['REASON', s.note, 'n']]
+                    : [['REMAINING', remain.toFixed(1) + ' s'],
+                       ['OBSERVED', (t - s.tOpen).toFixed(1) + ' s', 'n'],
+                       ['WATCHING', 'POD B FLOW + PASS SPEED', 'n']],
+      why: 'A blockage leaves marks downstream: vehicles behind brake, crawl, swerve around it and queue, and arrivals at POD B thin out. A legal turn-off leaves nothing at all. These ' + CFG.CORROB + ' seconds exist to tell those two apart. This simulation models that behaviour; it has not been checked against real crash data.' });
+
+    const f = s.f, sp = s.sp;
+    if (f){
+      const rp = f.ratio === null ? 'INSUFFICIENT' : (f.ratio * 100).toFixed(0) + '%';
+      const rc = f.ratio === null ? 'n' : (f.ratio < 0.5 ? 'r' : f.ratio < 0.85 ? '' : 'g');
+      let why;
+      if (f.ratio === null) why = 'Not enough downstream samples to compare yet. Still accumulating.';
+      else if (f.ratio >= 0.85) why = 'Arrivals at POD B still match the inflow measured at POD A. The traffic behind noticed nothing at all — the road is not corroborating a crash.';
+      else why = 'Arrivals downstream fall short of upstream inflow by ' + f.gap.toFixed(1) +
+                 ' veh/min. One vehicle taking a turn-off does not make other vehicles disappear — this gap needs a different explanation.';
+      out.push({ cls: s.settled ? 'dead' : 'live', ic: '6', tt: 'DOWNSTREAM FLOW · ROLLING 90 s',
+        ts: s.settled ? clk(s.tSettle) : clk(t), kv: [
+          ['EXPECTED', f.exp.toFixed(1) + ' veh/min', 'n'],
+          ['OBSERVED', f.act.toFixed(1) + ' veh/min', rc],
+          ['GAP', f.gap.toFixed(1) + ' veh/min', f.gap > 2 ? 'r' : 'g'],
+          ['RATIO', rp, rc],
+          ['UPSTREAM', kmh(sp.up).toFixed(0) + ' km/h', 'n'],
+          ['DOWNSTREAM', sp.n === 0 ? 'NO ARRIVALS' : kmh(sp.dn).toFixed(0) + ' km/h',
+                         (sp.n === 0 || sp.drop > 0.25) ? 'r' : 'n'],
+          ['ABSENCES IN EVENT', String(1 + s.extra.length), s.extra.length ? 'r' : 'g']
+        ], why: why });
+    }
+
+    const tc = s.tier === 2 ? 'alert' : s.tier === 1 ? 'warn' : 'ok';
+    out.push({ cls: (s.settled ? '' : 'live ') + tc, ic: '7', tt: 'CONFIDENCE · ' + TIER[s.tier],
+      ts: s.settled ? clk(s.tSettle) : clk(t), kv: [
+        ['VALUE', s.conf.toFixed(2), s.tier === 2 ? 'r' : ''],
+        ['THRESHOLD', 'DISPATCH NOW ≥ 0.82 · AT WINDOW CLOSE ≥ 0.66', 'n'],
+        ['BREAKDOWN', 'absence .18 + flow ' + (s.parts ? s.parts.evFlow.toFixed(2) : '.00') +
+                      ' + speed ' + (s.parts ? s.parts.evSpeed.toFixed(2) : '.00') +
+                      ' + knock-on ' + (s.parts ? s.parts.evMiss.toFixed(2) : '.00'), 'n']
+      ], why: s.reason });
+
+    if (!s.settled){
+      out.push({ cls: 'pending', ic: '8', tt: 'DECISION · PENDING', ts: '—',
+        kv: [['STATE', 'GATHERING EVIDENCE', 'n']],
+        why: 'Confidence is a continuous range, not a switch. Without evidence, ANTAR does nothing at all.' });
+      return out;
+    }
+
+    if (s.verdict === 'dispatch'){
+      out.push({ cls: 'alert', ic: '8', tt: 'DECISION · ALERT DISPATCHED', ts: clk(s.tSettle), kv: [
+        ['CONFIDENCE', s.conf.toFixed(2) + ' · HIGH', 'r'],
+        ['CALL', 'BLOCKING EVENT BETWEEN POD A AND POD B', 'r'],
+        ['TRIGGER', s.note, 'n']
+      ], why: 'Confidence crossed the dispatch threshold. Absence, flow collapse, speed drop and knock-on misses all corroborate each other, and a blockage is by far the likeliest explanation for all four at once.' });
+      const hopsLit = TX.hops.filter(function(x){ return x.lit; }).length;
+      const rcv = TX.recv.filter(function(x){ return x.lit; }).length;
+      out.push({ cls: TX.done ? 'alert' : 'live alert', ic: '9',
+        tt: TX.done ? 'TRANSMISSION COMPLETE · ACKNOWLEDGED' : 'TRANSMITTING · MESH RELAY',
+        ts: clk(s.tSettle), kv: [
+          ['HOPS', hopsLit + ' / ' + TX.hops.length, 'r'],
+          ['LATENCY', (hopsLit ? TX.hops[hopsLit - 1].acc : 0) + ' ms', 'n'],
+          ['RECIPIENTS', rcv + ' / 3 ACKNOWLEDGED', rcv === 3 ? 'r' : 'n']
+        ], why: 'Simulated relay: the alert hops pod to pod until one reaches cellular coverage, then the tower delivers it to the three recipients. All of this is modelled — no message leaves this browser. Pods carry it to the tower; the tower carries it to people.' });
+    } else {
+      out.push({ cls: 'ok', ic: '8', tt: 'DECISION · SUSPICION CLEARED · LEGAL EXIT', ts: clk(s.tSettle), kv: [
+        ['CONFIDENCE', s.conf.toFixed(2) + ' · LOW', 'g'],
+        ['CALL', 'VEHICLE LEFT THE SEGMENT LEGALLY', 'g'],
+        ['DISPATCH', 'NONE', 'g']
+      ], why: 'In ' + CFG.CORROB + ' seconds the road offered no corroboration: flow held, speed held, nothing else went missing. ANTAR closes the suspicion and files it — no dispatch, no interruption. The cost of a false alarm stays with the system, not with a hospital.' });
+    }
+    return out;
+  },
+
+  checklist(){
+    const st = this.steps();
+    if (!st.length){
+      return '<div class="empty">No track selected.<br><br>' +
+             'The simulator is already running: POD A and POD B are holding an arrival ' +
+             'window open on every vehicle in the segment at once — see ACTIVE TRACKS.<br><br>' +
+             'Press <b>SCENARIO A / B / C</b> — the next vehicle past POD A becomes the tracked one.</div>';
+    }
+    const cut = Math.max(0, st.length - 3);
+    let h = '';
+    for (let i = 0; i < st.length; i++) h += stepHTML(st[i], i < cut);
+    return h;
+  },
+
+  /* ------------------------------------------- evidence: flow up front */
+  flowBlock(F, live){
+    const exp = F.exp, act = F.act, gap = F.gap;
+    const mx = Math.max(exp, act, 1);
+    const obsPct = c01(act / mx) * 100, gapPct = c01(gap / mx) * 100;
+    const low = F.ratio !== null && F.ratio < 0.75;
+    return '<div id="flowblk"><div class="lb">DOWNSTREAM FLOW · POD B · ROLLING 90 s</div>' +
+      '<div class="fgrid">' +
+        '<div class="fcell exp"><div class="k">EXPECTED</div><div class="v">' + exp.toFixed(1) +
+          '</div><div class="u">VEH / MIN · POD A, LAGGED</div></div>' +
+        '<div class="fcell obs' + (low ? ' lowv' : '') + '"><div class="k">OBSERVED</div><div class="v">' +
+          act.toFixed(1) + '</div><div class="u">VEH / MIN · AT POD B</div></div>' +
+      '</div>' +
+      '<div id="gapbar"><div class="obsf" style="width:' + obsPct.toFixed(1) + '%"></div>' +
+        '<div class="gapf" style="left:' + obsPct.toFixed(1) + '%;width:' + gapPct.toFixed(1) + '%"></div>' +
+        '<div class="cap">' + (F.ratio === null ? 'SAMPLING' : (F.ratio * 100).toFixed(0) + '% ARRIVING') + '</div></div>' +
+      '<div class="gaprow"><em>SHORTFALL</em><b class="' + (gap > 2 ? 'r' : '') + '">' +
+        gap.toFixed(1) + ' veh/min</b></div>' +
+      (live ? '<canvas id="spark"></canvas>' : '') +
+      '</div>';
+  },
+
+  evidence(){
+    const s = this.sus, t = S.t;
+    const f = ANTAR.flow(t), sp = ANTAR.speeds(t);
+    let h = this.flowBlock(s && s.f ? s.f : f, !!s);
+
+    if (!s){
+      h += '<div class="blk"><div class="lb">STATUS</div><div class="big d">NO ACTIVE EVENT</div>' +
+           '<div class="sub">FLOW HELD · NOTHING MISSING</div></div>';
+      h += '<div class="blk"><div class="lb">BASELINE</div>' +
+           row('UPSTREAM SPEED', kmh(sp.up).toFixed(0) + ' km/h') +
+           row('DOWNSTREAM SPEED', sp.n === 0 ? 'NO ARRIVALS' : kmh(sp.dn).toFixed(0) + ' km/h') +
+           row('OPEN TRACKS', String(ANTAR.tracks.filter(function(k){ return k.state === 'open'; }).length), 'd') +
+           '</div>';
+      h += '<div class="blk"><div class="lb">PRINCIPLE</div><div class="topo">' +
+           'ANTAR runs no video and knows no vehicle identity.<br>' +
+           'All it holds is: <b>when, how fast, how long, past which pod</b>.<br>' +
+           'The evidence for a crash is not on the vehicle that vanished — ' +
+           'it is on the vehicles behind it.</div></div>';
+      return h;
+    }
+
+    const cf = s.conf, pct = (cf * 100).toFixed(0);
+    h += '<div class="blk"><div class="lb">CONFIDENCE</div>' +
+         '<div class="big' + (s.tier === 2 ? ' r' : '') + '">' + cf.toFixed(2) +
+         '<span style="font-size:12px;letter-spacing:.2em;margin-left:10px">' + TIER[s.tier] + '</span></div>' +
+         '<div id="confBar"><div id="confFill" style="width:' + pct + '%"></div>' +
+         '<div class="dv" style="left:35%"></div><div class="dv" style="left:66%"></div>' +
+         '<div class="mk" style="left:calc(' + pct + '% - 1px)"></div></div>' +
+         '<div class="tiers"><span class="' + (s.tier === 0 ? 'on' : '') + '">LOW &lt;0.35</span>' +
+         '<span class="' + (s.tier === 1 ? 'on' : '') + '">MED</span>' +
+         '<span class="hi ' + (s.tier === 2 ? 'on' : '') + '">HIGH ≥0.66 · NOW ≥0.82</span></div></div>';
+
+    const remain = Math.max(0, s.tClose - t);
+    const prog = c01(1 - remain / CFG.CORROB) * 100;
+    h += '<div class="blk"><div class="lb">CORROBORATION WINDOW</div>' +
+         '<div class="big' + (s.settled ? ' d' : '') + '">' +
+         (s.settled ? 'CLOSED' : remain.toFixed(1) + ' s') + '</div>' +
+         '<div class="prog"><i style="width:' + (s.settled ? 100 : prog).toFixed(1) + '%"></i></div>' +
+         '<div class="sub">' + (s.settled ? s.note : 'MONITORING DOWNSTREAM FLOW') + '</div></div>';
+
+    const SP = s.sp || sp;
+    const P = s.parts || { evAbs: 0.18, evFlow: 0, evSpeed: 0, evMiss: 0 };
+    h += '<div class="blk"><div class="lb">EVIDENCE WEIGHTS</div>' +
+         row('ABSENCE (BASE)', '+' + P.evAbs.toFixed(2), 'd') +
+         row('FLOW SHORTFALL', '+' + P.evFlow.toFixed(2), P.evFlow > 0.1 ? 'a' : 'd') +
+         row('SPEED DROP', '+' + P.evSpeed.toFixed(2), P.evSpeed > 0.05 ? 'a' : 'd') +
+         row('KNOCK-ON MISSES', '+' + P.evMiss.toFixed(2), P.evMiss > 0.05 ? 'a' : 'd') +
+         row('PASS SPEED', (SP.n === 0 ? 'NO ARRIVALS' : kmh(SP.dn).toFixed(0) + ' km/h') +
+                           '  (up ' + kmh(SP.up).toFixed(0) + ')',
+             (SP.n === 0 || SP.drop > 0.25) ? 'r' : '') +
+         '</div>';
+    return h;
+  },
+
+  /* --------------------------------- active tracks + link + event log */
+  tracksTable(){
+    const t = S.t;
+    const rows = ANTAR.tracks.filter(function(k){
+      if (k.void) return false;
+      if (k.state === 'open') return true;
+      return t - (k.tB || k.tLate) < 12;          // linger briefly after closing
+    }).slice(-9).reverse();
+
+    let h = '<div class="tt-head"><span></span><span>TRACK</span><span>CLS</span>' +
+            '<span>km/h</span><span>WINDOW</span></div>';
+    if (!rows.length) h += '<div class="tnote">No open tracks.</div>';
+    for (const k of rows){
+      const col = S.colorOf[k.id] || '#4d5658';
+      const focus = this.trk === k;
+      let st, cls;
+      if (k.state === 'open'){
+        cls = 'open';
+        st = 'OPEN · ' + Math.max(0, k.tLate - t).toFixed(0) + 's left';
+      } else if (k.state === 'closed'){
+        cls = 'closed'; st = 'MATCHED ' + rel(k.tB - k.tExp);
+      } else {
+        cls = 'missed'; st = 'NO MATCH';
+      }
+      h += '<div class="tt-row ' + cls + (focus ? ' focus' : '') + '">' +
+           '<span class="sw" style="background:' + col + '"></span>' +
+           '<span class="id">' + k.id + '</span>' +
+           '<span class="ty">' + k.cls + '</span>' +
+           '<span>' + kmh(k.vA).toFixed(0) + '</span>' +
+           '<span class="st">' + st + '</span></div>';
+    }
+    h += '<div class="tnote">Every vehicle in the segment carries its own window, ' +
+         'running in parallel. Colour swatches are a demo aid so you can find a row on the ' +
+         'road — the pods never see colour.</div>';
+    return h;
+  },
+
+  linkPane(){
+    let h = this.tracksTable();
+    h += '<div class="blk"><div class="lb">PAIRING TOPOLOGY</div><div class="topo">' +
+         '<b>POD A</b> <span class="ar">&#8646;</span> <b>POD B</b>&nbsp;&nbsp;anchor pair · ' +
+         (CFG.PB - CFG.PA) + ' m<br>' +
+         '<b>POD B</b> <span class="ar">&#8594;</span> <b>TOWER-07</b>&nbsp;&nbsp;cellular uplink<br>' +
+         '<b>TOWER-07</b> <span class="ar">&#8594;</span> 3 recipients (simulated)' +
+         '</div><div class="motto">Pods carry it to the tower. <b>The tower carries it to people.</b></div></div>';
+
+    h += '<div class="blk"><div class="lb">POD STATUS · DISPLAY FACE</div>';
+    const chain = relayPods();
+    for (let i = 0; i < chain.length; i++){
+      const pd = chain[i];
+      let cls = 'up';
+      if (TX.on && (i === 0 || (TX.hops[i - 1] && TX.hops[i - 1].lit))) cls = 'tx';
+      h += '<div class="node ' + cls + '"><div class="d"></div><em>' + pd.id + '</em>' +
+           '<span>RSSI ' + pd.rssi + ' dBm · SOLAR ' + pd.bat + '%</span></div>' +
+           '<div class="face">' + pd.face + '</div>';
+    }
+    const twOn = TX.on && TX.hops.length && TX.hops[TX.hops.length - 1].lit;
+    h += '<div class="node ' + (twOn ? 'rx' : 'up') + '"><div class="d"></div><em>TOWER-07</em>' +
+         '<span>4G · ' + (twOn ? 'CARRYING' : 'IDLE') + '</span></div>';
+    if (POD.C.enabled) h += '<div class="sub" style="margin-top:6px">SPARE RELAYS ENGAGED</div>';
+    h += '</div>';
+
+    h += '<div class="blk"><div class="lb">RECIPIENTS · SIMULATED, NOT A LIVE INTEGRATION</div>';
+    for (let i = 0; i < RECIP.length; i++){
+      const lit = TX.on && TX.recv[i] && TX.recv[i].lit;
+      h += '<div class="node ' + (lit ? 'rx' : '') + '"><div class="d"></div>' +
+           '<em' + (lit ? '' : ' style="color:#5d6668"') + '>' + RECIP[i].n + '</em>' +
+           '<span>' + (lit ? 'ACK ' + (TX.baseAcc + TX.recv[i].ms) + ' ms' : 'IDLE') + '</span></div>';
+    }
+    h += '</div>';
+
+    h += '<div class="blk" style="border:none"><div class="lb">EVENT LOG · ALL TIMESTAMPED</div></div>';
+    for (let i = LOGS.length - 1, n = 0; i >= 0 && n < 60; i--, n++){
+      const L = LOGS[i];
+      h += '<div class="lg ' + L.c + '"><t>' + clk(L.t).slice(0, 8) + '</t><span>' + L.x + '</span></div>';
+    }
+    return h;
+  },
+
+  spark(){
+    const c = $('spark');
+    if (!c || !this.sus) return;
+    const s = this.sus, w = c.clientWidth, hh = 58;
+    c.width = Math.round(w * DPR); c.height = Math.round(hh * DPR);
+    const g = c.getContext('2d');
+    g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    g.clearRect(0, 0, w, hh);
+    const H0 = s.hist;
+    if (H0.length < 2) return;
+    let mx = 1;
+    for (const p of H0) mx = Math.max(mx, p.exp, p.act);
+    mx *= 1.25;
+    const t0 = s.tOpen, t1 = s.tClose;
+    const X = function(t){ return c01((t - t0) / (t1 - t0)) * (w - 2) + 1; };
+    const Y = function(v){ return hh - 3 - (v / mx) * (hh - 13); };
+    g.strokeStyle = '#1a2122'; g.lineWidth = 1;
+    for (let i = 1; i < 4; i++){
+      const y = 3 + (hh - 13) * i / 4;
+      g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
+    }
+    g.fillStyle = 'rgba(255,59,47,0.18)';
+    g.beginPath();
+    H0.forEach(function(p, i){ const x = X(p.t), y = Y(p.exp); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+    for (let i = H0.length - 1; i >= 0; i--) g.lineTo(X(H0[i].t), Y(H0[i].act));
+    g.closePath(); g.fill();
+    g.strokeStyle = '#6d7679'; g.lineWidth = 1.2; g.beginPath();
+    H0.forEach(function(p, i){ const x = X(p.t), y = Y(p.exp); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+    g.stroke();
+    g.strokeStyle = '#F5B301'; g.lineWidth = 1.7; g.beginPath();
+    H0.forEach(function(p, i){ const x = X(p.t), y = Y(p.act); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+    g.stroke();
+    g.font = '9px ' + MONO;
+    g.fillStyle = '#6d7679'; g.fillText('EXPECTED', 4, 10);
+    g.fillStyle = '#F5B301'; g.fillText('OBSERVED', 62, 10);
+    g.fillStyle = '#7a3a34'; g.textAlign = 'right';
+    g.fillText('SHORTFALL', w - 4, 10);
+    g.textAlign = 'left';
+  },
+
+  paint(){
+    const panes = [['chk', this.checklist()], ['ev', this.evidence()], ['rt', this.linkPane()]];
+    for (const p of panes){
+      const el = $(p[0]);
+      const st = el.scrollTop;
+      el.innerHTML = p[1];
+      el.scrollTop = st;
+    }
+    this.spark();
+
+    $('clk').textContent = clk(S.t);
+    const f = ANTAR.flow(S.t);
+    $('chkHint').textContent = this.trk ? this.trk.id : '';
+    $('pFlow').textContent = 'INFLOW ' + f.exp.toFixed(1) + '/min';
+    const open = ANTAR.tracks.filter(function(k){ return k.state === 'open'; }).length;
+    $('pTrk').textContent = 'OPEN ' + open;
+    $('rtHint').textContent = open + ' IN SEGMENT';
+    const m = $('pMode'), s = this.sus;
+    m.className = 'pill';
+    if (s && !s.settled){ m.textContent = s.evt + ' · CORROBORATING'; m.className = 'pill warm'; }
+    else if (s && s.verdict === 'dispatch'){ m.textContent = 'ALERT DISPATCHED · ' + s.evt; m.className = 'pill hot'; }
+    else if (s && s.verdict === 'dismiss'){ m.textContent = 'CLEARED · ' + s.evt; }
+    else if (S.armed){ m.textContent = 'ARMED · AWAITING PASS'; m.className = 'pill warm'; }
+    else if (this.trk){ m.textContent = 'TRACKING · ' + this.trk.id; }
+    else m.textContent = 'STANDBY';
+  }
+};
+
+
+/* ================================================================
+   SCENARIO CONTROL — the user picks a scenario; everything else runs itself
+   ================================================================ */
+/* A scenario press restarts the demo from a clean, reproducible road: the
+   previous run's wreck, queue and depressed statistics are all cleared, then a
+   silent warm-up re-establishes the free-flow baseline the pods measure against. */
+function resetRun(){
+  ANTAR.sus = null; ANTAR.tracks.length = 0; ANTAR.aDet.length = 0; ANTAR.bDet.length = 0;
+  TX.reset();
+  SMOKE.length = 0;
+  S.veh.length = 0; S.onc.length = 0;
+  S.secondary = null; S.halter = null; S.focusVeh = null; S.armed = null;
+  S.spawnIn = 0; S.oncIn = 2; S.colorOf = {};
+  POD.A.face = 'A ONLINE'; POD.B.face = 'B LINK';
+  UI.trk = null; UI.sus = null;
+  warmUp(1100);
+}
+function warmUp(steps){
+  S.quiet = true;
+  for (let i = 0; i < steps; i++){ S.t += 0.2; updateWorld(0.2); ANTAR.tick(S.t); }
+  S.quiet = false;
+}
+
+const SC = {
+  A: { fate: 'A',     name: 'SCENARIO A · NOMINAL',
+       note: '[GROUND TRUTH] the vehicle will pass POD B normally.' },
+  B: { fate: 'crash', name: 'SCENARIO B · INCIDENT',
+       note: '[GROUND TRUTH] the vehicle will stop at K0.610. ANTAR is not told this.' },
+  C: { fate: 'exit',  name: 'SCENARIO C · LEGAL EXIT',
+       note: '[GROUND TRUTH] the vehicle will turn onto the village road at K0.430. ANTAR is not told this.' }
+};
+
+function startScenario(id){
+  resetRun();
+  S.armed = SC[id].fate;
+  S.scenario = id;
+  for (const b of document.querySelectorAll('.btn[data-sc]')) b.classList.toggle('on', b.dataset.sc === id);
+  logEvt('a', '-- ' + SC[id].name + ' ARMED · awaiting next pass at POD A --');
+  logEvt('q', SC[id].note);
+  UI.paint();
+  $('chk').scrollTop = 0;
+}
+for (const b of document.querySelectorAll('.btn[data-sc]')){
+  b.addEventListener('click', function(){ startScenario(this.dataset.sc); });
+}
+for (const b of document.querySelectorAll('.btn[data-cam]')){
+  b.addEventListener('click', function(){
+    setCam(this.dataset.cam);
+    for (const o of document.querySelectorAll('.btn[data-cam]'))
+      o.classList.toggle('on', o.dataset.cam === this.dataset.cam);
+  });
+}
+
+/* ================================================================
+   BOOT
+   ================================================================ */
+resize();
+
+/* warm-up: fill the road and establish the rolling POD A/B baselines */
+warmUp(1400);
+LOGS.length = 0;
+logEvt('a', 'ANTAR SIMULATION ONLINE · POD A ' + String.fromCharCode(8646) + ' POD B modelled as paired · ' +
+            (CFG.PB - CFG.PA) + ' m segment · simulated uplink to TOWER-07 reachable');
+logEvt('', 'Baseline established · every vehicle in the segment tracked in parallel');
+
+let last = performance.now();
+function frame(now){
+  let dw = (now - last) / 1000;
+  last = now;
+  if (dw > 0.06) dw = 0.06;
+  S.t += dw * CFG.TS;
+
+  updateWorld(dw * CFG.TS);
+  ANTAR.tick(S.t);
+  TX.update();
+  updateCam(dw);
+  render();
+
+  if (now - UI.last > 110){ UI.last = now; UI.paint(); }
+  requestAnimationFrame(frame);
+}
+UI.paint();
+requestAnimationFrame(frame);
+
+</script>
+</body>
+</html>

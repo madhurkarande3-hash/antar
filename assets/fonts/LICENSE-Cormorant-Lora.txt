@@ -1,0 +1,3 @@
+Cormorant Garamond (Christian Thalmann) and Lora (Cyreal) are licensed under the
+SIL Open Font License, Version 1.1. https://openfontlicense.org
+Both files here are the Latin subsets as served by Google Fonts, used by the ANTAR intro.

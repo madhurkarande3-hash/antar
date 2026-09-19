@@ -1,0 +1,19 @@
+ANTAR — links
+=============
+
+Live demo (Vercel):   <paste the URL here>
+Repository (GitHub):  <paste the URL here>
+
+Team Bounded · RevengersHack, Open Innovation track
+Madhur Karande (lead) · Mrigaj Waikar · Arahant Kankal
+
+What to open first
+------------------
+1. The live demo link above, or index.html from this folder.
+2. Click "Open the simulator".
+3. Scenario A  — normal traffic, nothing happens (correct).
+4. Scenario B  — a crash: absence, then corroboration, then the alert.
+5. Scenario C  — a legal turn-off: identical absence, no alert.
+
+Everything runs in the browser. No install, no login, no server.
+What is real and what is simulated: see STATUS.md.

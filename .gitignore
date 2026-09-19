@@ -1,0 +1,59 @@
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# --- Editors / IDEs ---
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Embedded / firmware build output (hardware track) ---
+.pio/
+.pioenvs/
+.piolibdeps/
+build/
+dist/
+*.bin
+*.elf
+*.hex
+*.map
+sdkconfig
+sdkconfig.old
+managed_components/
+
+# --- Node (only if tooling is added later) ---
+node_modules/
+npm-debug.log*
+yarn-error.log*
+package-lock.json
+pnpm-lock.yaml
+
+# --- Python (only if tooling is added later) ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# --- ANTAR backend runtime data ---
+backend/data/
+*.db
+*.db-wal
+*.db-shm
+.pytest_cache/
+
+# --- Logs, scratch, local overrides ---
+*.log
+*.tmp
+tmp/
+scratch/
+.env
+.env.local
+.vercel

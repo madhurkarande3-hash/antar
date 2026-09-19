@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ANTAR · Control room</title>
+<link rel="icon" href="/static/favicon.svg">
+<style>
+/* Fonts are self-hosted (SIL OFL, licences in static/fonts) so the demo looks the same offline. */
+@font-face{font-family:'Barlow';src:url('/static/fonts/barlow-latin-400-normal.woff2') format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'Barlow';src:url('/static/fonts/barlow-latin-500-normal.woff2') format('woff2');font-weight:500;font-display:swap}
+@font-face{font-family:'Barlow';src:url('/static/fonts/barlow-latin-600-normal.woff2') format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:'Barlow Condensed';src:url('/static/fonts/barlow-condensed-latin-500-normal.woff2') format('woff2');font-weight:500;font-display:swap}
+@font-face{font-family:'Barlow Condensed';src:url('/static/fonts/barlow-condensed-latin-600-normal.woff2') format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:'Barlow Condensed';src:url('/static/fonts/barlow-condensed-latin-700-normal.woff2') format('woff2');font-weight:700;font-display:swap}
+@font-face{font-family:'IBM Plex Mono';src:url('/static/fonts/ibm-plex-mono-latin-400-normal.woff2') format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'IBM Plex Mono';src:url('/static/fonts/ibm-plex-mono-latin-500-normal.woff2') format('woff2');font-weight:500;font-display:swap}
+@font-face{font-family:'IBM Plex Mono';src:url('/static/fonts/ibm-plex-mono-latin-600-normal.woff2') format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:'IBM Plex Mono';src:url('/static/fonts/ibm-plex-mono-latin-700-normal.woff2') format('woff2');font-weight:700;font-display:swap}
+:root{
+  color-scheme:dark;
+  --night:#0a0b0a; --asphalt:#121412; --kerb:#232623; --line:#2e322e;
+  --dust:#8b9690; --paper:#eef3f1;
+  /* Soft neon signal palette. One meaning per colour, so the eye learns it in seconds:
+     cyan   = the system is alive and listening (calm, trust)
+     amber  = watching / needs attention (caution, the pod's own face colour)
+     coral  = incident, act now (the only warm-red on screen, so it is noticed pre-attentively)
+     mint   = all clear (relief after tension)
+     violet = ground truth / reference only, never a signal */
+  --signal:#5ce1e6; --amber:#ffc857; --amber-dim:#6e5418;
+  --ok:#6dffb3; --alert:#ff4f6d; --truth:#a9a6ff;
+  --glow-signal:0 0 10px rgba(92,225,230,.55);
+  --glow-amber:0 0 12px rgba(255,200,87,.35);
+  --glow-alert:0 0 18px rgba(255,79,109,.5);
+  --glow-ok:0 0 14px rgba(109,255,179,.4);
+  --sans:"Barlow","Bahnschrift","Segoe UI",system-ui,sans-serif;
+  --cond:"Barlow Condensed","Bahnschrift Condensed","Arial Narrow",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;color:var(--paper);font:14px/1.5 var(--sans)}
+body{background-color:var(--night);
+  /* faint survey grid, like a road drawing sheet: 120px major, 24px minor */
+  background-image:
+    linear-gradient(rgba(233,238,240,.028) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(233,238,240,.028) 1px,transparent 1px),
+    linear-gradient(rgba(233,238,240,.012) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(233,238,240,.012) 1px,transparent 1px);
+  background-size:120px 120px,120px 120px,24px 24px,24px 24px;background-attachment:fixed}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+
+header{background:rgba(10,11,10,.92);display:flex;align-items:center;gap:18px;padding:14px 22px;border-bottom:1px solid var(--kerb);flex-wrap:wrap}
+.mark{display:flex;align-items:baseline;gap:12px}
+.mark b{font:700 24px var(--cond);letter-spacing:.34em}
+.mark span{color:var(--dust);font:500 13px var(--cond);letter-spacing:.14em;text-transform:uppercase}
+.clock{font:600 20px var(--mono);color:var(--amber);text-shadow:var(--glow-amber);margin-left:auto}
+.conn{display:flex;align-items:center;gap:8px;color:var(--dust)}
+.conn i{width:8px;height:8px;border-radius:50%;background:var(--alert)}
+.conn.on i{background:var(--signal);box-shadow:var(--glow-signal);animation:alive 2.4s ease-in-out infinite}
+@keyframes alive{50%{opacity:.45;box-shadow:none}}
+header nav{display:flex;gap:14px}
+header nav a{color:var(--dust);text-decoration:none;border-bottom:1px solid var(--line)}
+header nav a:hover{color:var(--paper)}
+select{background:var(--asphalt);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+
+.road{position:relative;border-bottom:1px solid var(--kerb);background:#070807}
+.road canvas{display:block;width:100%;height:210px}
+.road .cap{position:absolute;right:22px;bottom:10px;color:var(--truth);font-size:12px}
+
+main{display:grid;grid-template-columns:300px minmax(0,1fr) 380px;gap:0;min-height:0}
+section{padding:18px 22px;border-right:1px solid var(--kerb);min-width:0}
+section:last-child{border-right:0}
+h2{font:600 13px var(--cond);letter-spacing:.16em;text-transform:uppercase;margin:0 0 12px;color:var(--dust)}
+.sub{color:var(--dust);font-size:13px;margin:-8px 0 14px}
+
+.sc{display:grid;gap:8px;margin-bottom:22px}
+.sc button{display:grid;grid-template-columns:34px 1fr;align-items:center;text-align:left;gap:10px;background:var(--asphalt);border:1px solid var(--line);border-radius:8px;padding:10px 12px;cursor:pointer}
+.sc button:hover{border-color:var(--dust)}
+.sc button.on{border-color:var(--amber);box-shadow:inset 3px 0 0 var(--amber)}
+.sc b{font:700 18px var(--mono);color:var(--amber)}
+.sc small{display:block;color:var(--dust)}
+.speed{display:flex;align-items:center;gap:10px;margin:-8px 0 22px;color:var(--dust)}
+.speed input{flex:1;accent-color:var(--amber)}
+
+.pods{display:grid;gap:8px}
+.pod{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:10px 12px;background:var(--asphalt);border-radius:8px;border:1px solid var(--line)}
+.pod.dark{opacity:.55;border-style:dashed}
+.pod .face{align-self:start;font:700 13px var(--mono);color:var(--amber);background:#161208;text-shadow:var(--glow-amber);padding:2px 6px;border-radius:3px;letter-spacing:.08em;justify-self:end}
+.pod.dark .face{color:var(--amber-dim)}
+.pod small{color:var(--dust)}
+.toggle{background:none;border:1px solid var(--line);border-radius:6px;padding:2px 8px;cursor:pointer;color:var(--dust);justify-self:end}
+.toggle:hover{color:var(--paper);border-color:var(--dust)}
+
+.decision{display:grid;gap:16px}
+.idle{color:var(--dust);border:1px dashed var(--line);border-radius:10px;padding:26px;text-align:center}
+.verdict{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.verdict .evt{font:700 26px var(--mono)}
+.badge{padding:3px 10px;border-radius:99px;font-weight:600;font-size:13px;border:1px solid}
+.b-watch{color:var(--amber);border-color:var(--amber-dim)}
+.b-dispatch{color:#1c0509;background:var(--alert);border-color:var(--alert);box-shadow:var(--glow-alert)}
+.b-dismiss{color:var(--ok);border-color:#1f5a40;text-shadow:var(--glow-ok)}
+.meter{position:relative;height:28px;margin-bottom:18px;background:var(--asphalt);border-radius:6px;border:1px solid var(--line)}
+.meter .fill{position:absolute;inset:0 auto 0 0;border-radius:5px;background:linear-gradient(90deg,#3d3010,var(--amber));box-shadow:var(--glow-amber);transition:width .25s}
+.meter.hot .fill{background:linear-gradient(90deg,#4a1420,var(--alert));box-shadow:var(--glow-alert)}
+.meter .tick{position:absolute;top:0;bottom:0;border-left:1px dashed rgba(255,255,255,.35)}
+.meter .tick span{position:absolute;top:30px;left:-20px;width:40px;text-align:center;font-size:11px;color:var(--dust);white-space:nowrap}
+.conf{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:-8px}.conf b{font:700 22px var(--mono)}.conf span{color:var(--dust)}
+.parts{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.part{background:var(--asphalt);border-radius:8px;padding:8px 10px}
+.part small{color:var(--dust);display:block}
+.part b{font:600 17px var(--mono)}
+.part .bar{height:3px;background:var(--kerb);margin-top:6px;border-radius:2px}
+.part .bar i{display:block;height:100%;background:var(--amber);border-radius:2px}
+.evidence{display:grid;grid-template-columns:1fr 1fr;gap:8px 18px}
+.evidence div{display:flex;justify-content:space-between;border-bottom:1px solid var(--kerb);padding:4px 0}
+.evidence span{color:var(--dust)}
+.reason{font-size:15px;line-height:1.6;max-width:70ch;margin:0}
+#spark{width:100%;height:70px;display:block}
+.stats{display:flex;gap:26px;color:var(--dust);flex-wrap:wrap}
+.stats b{color:var(--paper);font:600 20px var(--mono);display:block}
+
+.log{height:470px;overflow:auto;font:12.5px/1.55 var(--mono)}
+.log p{margin:0;padding:3px 0;border-bottom:1px solid #0e1316;display:grid;grid-template-columns:78px 1fr;gap:8px}
+.log time{color:#56606a}
+.l-ok{color:var(--ok)} .l-warn{color:var(--amber)} .l-alert{color:var(--alert)} .l-clear{color:var(--ok)}
+.l-truth{color:var(--truth)} .l-info{color:#b9c3c6}
+.filters{display:flex;gap:12px;color:var(--dust);margin:-4px 0 10px}
+.filters label{display:flex;gap:5px;align-items:center;cursor:pointer}
+
+.lower{display:grid;grid-template-columns:minmax(0,1fr) 380px;border-top:1px solid var(--kerb)}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-weight:500;color:var(--dust);padding:6px 8px;border-bottom:1px solid var(--line);font-size:13px}
+td{padding:9px 8px;border-bottom:1px solid var(--kerb);vertical-align:top}
+td .alerts{color:var(--dust);font-size:12.5px}
+tr.new{animation:flash 1.6s ease-out}
+@keyframes flash{from{background:rgba(255,79,109,.22)}to{background:transparent}}
+.act{display:flex;gap:6px}
+.act button,.form button{background:var(--asphalt);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer}
+.act button:hover,.form button:hover{border-color:var(--amber);color:var(--amber)}
+.empty{color:var(--dust);padding:18px 8px}
+.resp{display:grid;gap:6px;margin-bottom:14px}
+.resp div{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:8px 10px;background:var(--asphalt);border-radius:8px}
+.resp small{color:var(--dust);display:block}
+.resp button{background:none;border:0;color:var(--dust);cursor:pointer}
+.resp button:hover{color:var(--alert)}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.public-note{color:var(--dust);font-size:12.5px;margin:12px 0 0}
+.form input{background:var(--asphalt);border:1px solid var(--line);border-radius:6px;padding:7px 9px;min-width:0}
+.form .full{grid-column:1/-1}
+.err{color:var(--alert);font-size:13px;min-height:1.2em;grid-column:1/-1}
+
+@media (max-width:760px){main{grid-template-columns:1fr}section{border-right:0;border-bottom:1px solid var(--kerb)}.parts{grid-template-columns:1fr 1fr}.evidence{grid-template-columns:1fr}.road .cap{position:static;padding:6px 14px 10px;font-size:11px}}
+@media (prefers-reduced-motion:reduce){*,body::after{animation:none!important;transition:none!important}body.alarm::after{opacity:.8}}
+.banner{position:fixed;left:50%;bottom:24px;max-width:calc(100% - 24px);transform:translateX(-50%);z-index:50;display:none;align-items:center;gap:14px;
+  background:#1a080c;color:var(--alert);border:1px solid var(--alert);padding:12px 18px;font-weight:600;letter-spacing:.04em;
+  text-shadow:0 0 8px rgba(255,79,109,.6);box-shadow:var(--glow-alert),inset 0 0 22px rgba(255,79,109,.18)}
+.banner.show{display:flex;animation:blink 1s steps(2,start) infinite}
+.banner button{background:var(--alert);color:#1c0509;text-shadow:none;border:0;padding:6px 12px;font-weight:700;cursor:pointer}
+@keyframes blink{50%{box-shadow:0 0 34px rgba(255,79,109,.75),inset 0 0 30px rgba(255,79,109,.28)}}
+/* Peripheral vision reacts to light at the screen edges before the eyes move:
+   a slow red edge glow during an incident, a short mint wash when a candidate is cleared. */
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:40;opacity:0;transition:opacity .4s}
+body.alarm::after{box-shadow:inset 0 0 140px rgba(255,79,109,.42);animation:edge 1.2s ease-in-out infinite}
+body.cleared::after{box-shadow:inset 0 0 120px rgba(109,255,179,.28);animation:wash 1.6s ease-out}
+@keyframes edge{0%,100%{opacity:.35}50%{opacity:1}}
+@keyframes wash{0%{opacity:1}100%{opacity:0}}
+
+/* ---- v3.8 layout and controls ---- */
+header .tools{display:flex;gap:6px}
+.tool{display:flex;align-items:center;gap:6px;background:none;border:1px solid var(--line);color:var(--dust);padding:4px 10px;cursor:pointer;border-radius:4px}
+.tool:hover{color:var(--paper);border-color:var(--dust)}
+.tool[aria-pressed="true"]{color:var(--signal);border-color:rgba(92,225,230,.5)}
+.tool svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.tool svg .mute{display:none}
+#soundBtn[aria-pressed="false"] svg .wave{display:none}
+#soundBtn[aria-pressed="false"] svg .mute{display:inline}
+.clockwrap{margin-left:auto;display:flex;align-items:center;gap:10px}
+.clockwrap .clock{margin-left:0}
+.paused{display:none;font:600 12px var(--cond);letter-spacing:.16em;text-transform:uppercase;color:var(--amber);border:1px solid var(--amber-dim);padding:1px 7px}
+body.is-paused .paused{display:inline}
+kbd{font:600 11px var(--mono);border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;padding:0 5px;color:var(--dust)}
+.sc kbd{font:700 15px var(--mono);color:var(--amber);border-color:var(--amber-dim);padding:2px 7px;justify-self:start}
+.banner .beacon{width:10px;height:10px;border-radius:50%;background:var(--alert);box-shadow:var(--glow-alert)}
+.banner kbd{color:#1c0509;border-color:rgba(28,5,9,.4);margin-left:4px}
+
+main{grid-template-columns:290px minmax(0,1fr) 360px}
+.pair{font:500 12.5px var(--mono);color:var(--signal);border-left:2px solid var(--signal);padding:4px 10px;margin:-4px 0 10px}
+.pair.stricter{color:var(--amber);border-color:var(--amber)}
+.pair small{display:block;font:12px var(--sans);color:var(--dust)}
+.pods{gap:0}
+.pod{grid-template-columns:1fr auto auto;align-items:center;gap:0 8px;padding:7px 2px;background:none;border:0;border-bottom:1px solid var(--kerb);border-radius:0}
+.pod.dark{border-style:solid;background:repeating-linear-gradient(135deg,transparent 0 6px,rgba(255,255,255,.025) 6px 12px)}
+.pod .who b{font-weight:600}
+.pod .who small{display:block;font-size:11.5px}
+.pod .face{font-size:12px;padding:1px 6px}
+.pod{padding-left:10px;box-shadow:inset 2px 0 0 transparent}
+.pod.paired{box-shadow:inset 2px 0 0 var(--signal)}
+.pod.paired.dark{box-shadow:none}
+.toggle{font-size:12px}
+
+.dhead{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.watch{display:flex;align-items:baseline;gap:10px;color:var(--dust);font:600 12px var(--cond);letter-spacing:.14em;text-transform:uppercase}
+.watch b{font:600 22px var(--mono);letter-spacing:0;color:var(--amber);text-shadow:var(--glow-amber)}
+.watch.sent b{color:var(--alert);text-shadow:var(--glow-alert)}
+.watch.cleared b{color:var(--ok);text-shadow:var(--glow-ok)}
+.stats{margin-top:18px;padding-top:12px;border-top:1px solid var(--kerb);gap:22px;font-size:12.5px}
+.stats b{font-size:16px}
+.inc-h{margin-top:22px}
+.col-decision table{font-size:13px}
+.log{height:340px}
+.log p{grid-template-columns:62px 1fr}
+.resp-h{margin-top:20px}
+
+.toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,20px);opacity:0;pointer-events:none;z-index:60;
+  background:#171a17;border:1px solid var(--line);border-left:3px solid var(--alert);color:var(--paper);padding:10px 14px;max-width:min(520px,calc(100% - 24px));transition:opacity .2s,transform .2s}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+.guide{position:fixed;left:22px;bottom:22px;z-index:70;width:min(340px,calc(100% - 44px));background:#111311;border:1px solid var(--signal);
+  box-shadow:0 0 0 1px rgba(92,225,230,.15),0 18px 40px rgba(0,0,0,.6);padding:16px 18px}
+.guide[hidden]{display:none}
+.guide h3{margin:4px 0 6px;font:600 17px var(--cond);letter-spacing:.06em;text-transform:uppercase;color:var(--paper)}
+.guide p{margin:0 0 14px;color:#c9d0cc;line-height:1.5}
+.gstep{font:500 11px var(--mono);color:var(--signal)}
+.gbtns{display:flex;justify-content:space-between}
+.gbtns button{background:none;border:1px solid var(--line);color:var(--dust);padding:5px 12px;cursor:pointer}
+.gbtns .primary{border-color:var(--signal);color:var(--signal)}
+.spot{outline:2px solid var(--signal);outline-offset:4px;border-radius:2px;transition:outline-color .2s}
+
+body.presenter .col-log, body.presenter header nav{display:none}
+body.presenter main{grid-template-columns:320px minmax(0,1fr)}
+body.presenter .verdict .evt{font-size:34px}
+body.presenter .conf b, body.presenter .watch b{font-size:30px}
+body.presenter .reason{font-size:18px}
+body.presenter .sc button{padding:14px}
+
+@media (max-width:1180px){main,body.presenter main{grid-template-columns:1fr 1fr}.col-log{grid-column:1/-1;border-top:1px solid var(--kerb)}}
+@media (max-width:760px){main,body.presenter main{grid-template-columns:1fr}header .tools{order:5}.guide{left:12px;right:12px;bottom:12px;width:auto}}
+</style>
+</head>
+<body>
+<header>
+  <div class="mark"><b>ANTAR</b><span>Control room</span></div>
+  <select id="segSel" aria-label="Segment"></select>
+  <div class="conn" id="conn"><i></i><span>Connecting</span></div>
+  <nav><a href="/docs" target="_blank">API docs</a><a href="/demo/" target="_blank">Simulator</a></nav>
+  <div class="tools">
+    <button class="tool" id="guideBtn" title="Short guide (?)">Guide</button>
+    <button class="tool" id="presentBtn" aria-pressed="false" title="Presenter mode (P)">Present</button>
+    <button class="tool" id="soundBtn" aria-pressed="true" title="Alarm sound (S)">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6h3l4-3v10l-4-3H2z"/><path class="wave" d="M11 5.5c1 .8 1 4.2 0 5M12.8 3.8c2 1.8 2 6.6 0 8.4"/><path class="mute" d="M11 6l4 4M15 6l-4 4"/></svg>
+      <span>Sound</span></button>
+  </div>
+  <div class="clockwrap"><span class="paused" id="pausedTag">Paused</span><div class="clock num" id="clock">--:--:--.-</div></div>
+</header>
+<div class="banner" id="alarmBanner" role="alert"><i class="beacon"></i><span id="alarmText">Incident dispatched</span><button id="alarmAck">Acknowledge <kbd>K</kbd></button></div>
+
+<div class="road">
+  <div class="cap" id="roadCap">Ground truth from the traffic model. The detector never sees this view.</div>
+  <canvas id="road" aria-label="Road segment view"></canvas>
+</div>
+
+<main>
+  <section class="col-control" id="colControl">
+    <h2>Scenarios</h2>
+    <div class="sc" id="sc">
+      <button data-sc="A"><kbd>A</kbd><span>Normal traffic<small>Every vehicle arrives</small></span></button>
+      <button data-sc="B"><kbd>B</kbd><span>Crash<small>A vehicle stops on the road</small></span></button>
+      <button data-sc="C"><kbd>C</kbd><span>Turn-off<small>A vehicle takes the village road</small></span></button>
+    </div>
+    <div class="speed"><span>Speed</span><input id="speed" type="range" min="1" max="16" step="1" value="4"><span class="num" id="speedVal">4×</span></div>
+    <h2>Pods</h2>
+    <div class="pair" id="pair"></div>
+    <div class="pods" id="pods"></div>
+  </section>
+
+  <section class="col-decision" id="colDecision">
+    <div class="dhead"><h2>Decision</h2><div class="watch" id="watch" hidden><span id="watchLabel">Time since crash</span><b class="num" id="watchVal">00:00</b></div></div>
+    <div class="decision" id="decision"><div class="idle">No candidate open. Every vehicle in the segment is being tracked.</div></div>
+    <div class="stats" id="segStats"></div>
+    <h2 class="inc-h">Incidents</h2>
+    <table><thead><tr><th>#</th><th>Event</th><th>Status</th><th>Confidence</th><th>Alerts</th><th></th></tr></thead>
+      <tbody id="inc"><tr><td colspan="6" class="empty">Nothing decided yet. Run B or C to record a decision here.</td></tr></tbody></table>
+  </section>
+
+  <section class="col-log" id="colLog">
+    <h2>Live log</h2>
+    <p class="sub">What the detector received and decided, live from the simulation. "What really
+    happened" is the traffic model's own record, shown for reference only — the detector never
+    receives it.</p>
+    <div class="filters">
+      <span>Show</span><label><input type="checkbox" id="fPass" checked> every vehicle</label>
+      <label><input type="checkbox" id="fTruth"> what really happened (simulation reference)</label>
+    </div>
+    <div class="log" id="log"></div>
+    <h2 class="resp-h">Local responders</h2>
+    <p class="sub">Opt-in neighbours within 2 km, alerted with the hospital.</p>
+    <div class="resp" id="resp"></div>
+    <form class="form" id="respForm">
+      <input name="name" placeholder="Name" required>
+      <input name="phone" placeholder="Phone" required>
+      <input name="distance_km" type="number" step="0.1" min="0" max="2" placeholder="Distance km" required>
+      <input name="skills" placeholder="Skills">
+      <button class="full" type="submit">Register responder</button>
+      <div class="err" id="respErr"></div>
+    </form>
+  </section>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<div class="guide" id="guide" role="dialog" aria-labelledby="guideTitle" hidden>
+  <div class="gstep" id="gStep">1 / 4</div>
+  <h3 id="guideTitle"></h3>
+  <p id="guideText"></p>
+  <div class="gbtns"><button id="gSkip">Skip</button><button id="gNext" class="primary">Next</button></div>
+</div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const api = async (method, url, body) => {
+  const r = await fetch(url, {method, headers: body ? {'Content-Type':'application/json'} : {}, body: body ? JSON.stringify(body) : undefined});
+  if (!r.ok){ let m = r.statusText; try { const j = await r.json(); m = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } catch {} throw new Error(m); }
+  return r.status === 204 ? null : r.json();
+};
+
+const pref = {
+  get(k, d){ try { const v = localStorage.getItem('antar-' + k); return v == null ? d : v; } catch (e) { return d; } },
+  set(k, v){ try { localStorage.setItem('antar-' + k, v); } catch (e) {} }
+};
+let toastT;
+function toast(msg){ const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 4200); }
+
+let SEG = pref.get('seg', 'SEG-SIM-01');
+const STATE = {};            // segment -> latest snapshot
+const LOGS = {};             // segment -> events
+const INCIDENTS = new Map(); // id -> incident
+let seenInc = new Set();
+
+/* ---------------------------------------------------------------- socket */
+let ws, pingT;
+/* ---------------------------------------------------------------- alarm
+   Synthesised with Web Audio: no sound files, works offline. Browsers only allow audio
+   after the first click, so any click or key press on the page unlocks it. */
+const ALARM = (() => {
+  let ac = null, on = true;
+  try { on = localStorage.getItem('antar-sound') !== 'off'; } catch (e) {}
+  const unlock = () => { if (!ac) { const C = window.AudioContext || window.webkitAudioContext; if (C) ac = new C(); } if (ac && ac.state === 'suspended') ac.resume(); };
+  addEventListener('pointerdown', unlock, { capture: true });
+  addEventListener('keydown', unlock, { capture: true });
+  function tone(f0, f1, start, dur, vol, type){
+    const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + start;
+    o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.linearRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+    g.gain.setValueAtTime(vol, t + dur - 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
+  }
+  return {
+    get on(){ return on; },
+    set on(v){ on = v; try { localStorage.setItem('antar-sound', v ? 'on' : 'off'); } catch (e) {} },
+    /* incident dispatched: three rising two-tone sweeps, like an emergency wail */
+    siren(){
+      if (navigator.vibrate) navigator.vibrate([300, 120, 300, 120, 600]);
+      if (!on || !ac) return;
+      for (let i = 0; i < 3; i++){ tone(620, 1180, i * 0.62, 0.3, 0.22, 'sawtooth'); tone(1180, 620, i * 0.62 + 0.3, 0.3, 0.22, 'sawtooth'); }
+    },
+    /* candidate cleared (legal turn-off): one soft falling chime */
+    clear(){ if (!on || !ac) return; tone(880, 880, 0, 0.18, 0.12, 'sine'); tone(660, 660, 0.16, 0.32, 0.1, 'sine'); },
+    /* pod went dark: short low double beep */
+    warn(){ if (!on || !ac) return; tone(330, 330, 0, 0.14, 0.14, 'square'); tone(330, 330, 0.22, 0.14, 0.14, 'square'); }
+  };
+})();
+
+let alarmT = null, alarmInc = null;
+const titleBase = document.title;
+function raiseAlarm(inc){
+  alarmInc = inc.id;
+  $('alarmText').textContent = `Incident ${String(inc.id).padStart(2, '0')} dispatched · ${inc.segment} · ${Number(inc.confidence).toFixed(2)} ${inc.tier}`;
+  $('alarmBanner').classList.add('show'); document.body.classList.add('alarm');
+  ALARM.siren(); clearInterval(alarmT);
+  alarmT = setInterval(() => { ALARM.siren(); document.title = document.title === titleBase ? '● INCIDENT · ANTAR' : titleBase; }, 6000);
+}
+function stopAlarm(){ clearInterval(alarmT); alarmT = null; alarmInc = null; $('alarmBanner').classList.remove('show'); document.body.classList.remove('alarm'); document.title = titleBase; }
+$('alarmAck').onclick = async () => {
+  const id = alarmInc; stopAlarm();
+  if (id != null) try { await api('PATCH', `/api/incidents/${id}`, {status: 'acknowledged'}); } catch (e) { toast(e.message); }
+};
+function paintSound(){ $('soundBtn').setAttribute('aria-pressed', ALARM.on); $('soundBtn').title = ALARM.on ? 'Sound on (S)' : 'Sound off (S)'; }
+$('soundBtn').onclick = () => { ALARM.on = !ALARM.on; paintSound(); if (ALARM.on) ALARM.clear(); };
+paintSound();
+
+function connect(){
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+  ws.onopen = () => { setConn(true); clearInterval(pingT); pingT = setInterval(() => ws.readyState === 1 && ws.send('ping'), 15000); };
+  ws.onclose = () => { setConn(false); setTimeout(connect, 1500); };
+  ws.onmessage = m => handle(JSON.parse(m.data));
+}
+function setConn(on){ $('conn').classList.toggle('on', on); $('conn').querySelector('span').textContent = on ? 'Live' : 'Reconnecting'; }
+
+function handle(msg){
+  if (msg.type === 'state'){
+    STATE[msg.segment] = msg;
+    if (!$('segSel').querySelector(`option[value="${msg.segment}"]`)){
+      $('segSel').insertAdjacentHTML('beforeend', `<option value="${msg.segment}">${esc(msg.name)}</option>`);
+      if (msg.segment === SEG) $('segSel').value = SEG;
+    }
+    if (msg.segment === SEG) paintState(msg);
+  } else if (msg.type === 'event'){
+    (LOGS[msg.segment] ||= []).push(msg);
+    if (LOGS[msg.segment].length > 400) LOGS[msg.segment].splice(0, 100);
+    if (msg.segment === SEG) queueLog();
+    if (msg.kind === 'pod_status' && /offline|dark/i.test(msg.text || '')) ALARM.warn();
+    if (msg.segment === SEG) watchEvent(msg);
+  } else if (msg.type === 'incident'){
+    const prev = INCIDENTS.get(msg.incident.id), inc = msg.incident;
+    INCIDENTS.set(inc.id, inc); paintIncidents();
+    if (!prev && inc.status === 'dispatched') raiseAlarm(inc);          // re-confirmations do not re-alarm
+    else if (!prev && inc.status === 'dismissed'){
+      ALARM.clear(); document.body.classList.remove('cleared'); void document.body.offsetWidth; document.body.classList.add('cleared');
+    }
+    if (alarmInc === inc.id && inc.status !== 'dispatched') stopAlarm(); // acknowledged elsewhere
+  } else if (msg.type === 'incidents'){
+    msg.incidents.forEach(i => { INCIDENTS.set(i.id, i); seenInc.add(i.id); }); paintIncidents();
+  }
+}
+
+/* ------------------------------------------------------------------ road */
+const cv = $('road'), ctx = cv.getContext('2d');
+const PMIN = -130, PMAX = 1900;
+const CLS_COL = {'2W':'#e8e1c8', CAR:'#9fb8c9', '3W':'#e3c45a', HV:'#c9a27a'};
+function resize(){ const r = cv.getBoundingClientRect(); cv.width = r.width * devicePixelRatio; cv.height = r.height * devicePixelRatio; }
+addEventListener('resize', () => { resize(); if (STATE[SEG]) drawRoad(STATE[SEG]); }); resize();
+
+function drawRoad(s){
+  const W = cv.width, H = cv.height, d = devicePixelRatio;
+  ctx.clearRect(0, 0, W, H);
+  const pad = 30 * d, X = p => pad + (p - PMIN) / (PMAX - PMIN) * (W - 2 * pad);
+  const yc = H * 0.62, lane = 16 * d;
+  // village road
+  if (s.geometry){
+    ctx.strokeStyle = '#161c1f'; ctx.lineWidth = 12 * d; ctx.beginPath();
+    ctx.moveTo(X(s.geometry.exit_m), yc + lane); ctx.quadraticCurveTo(X(s.geometry.exit_m + 90), yc + lane + 10 * d, X(s.geometry.exit_m + 190), H - 4 * d); ctx.stroke();
+    ctx.fillStyle = '#56606a'; ctx.font = `${11 * d}px ${getComputedStyle(document.body).fontFamily}`;
+    ctx.fillText('Village road', X(s.geometry.exit_m + 120), H - 10 * d);
+  }
+  // carriageway
+  ctx.fillStyle = '#12171a'; ctx.fillRect(X(PMIN), yc - lane * 2, X(PMAX) - X(PMIN), lane * 3);
+  ctx.strokeStyle = '#3a4448'; ctx.setLineDash([10 * d, 12 * d]); ctx.lineWidth = d;
+  ctx.beginPath(); ctx.moveTo(X(PMIN), yc - lane * .5); ctx.lineTo(X(PMAX), yc - lane * .5); ctx.stroke(); ctx.setLineDash([]);
+  // active segment + monitored span
+  const a = X(0), b = X(s.segment_m);
+  ctx.fillStyle = s.degraded ? 'rgba(255,90,60,.06)' : 'rgba(245,179,1,.05)';
+  ctx.fillRect(a, yc - lane * 2, b - a, lane * 3);
+  // chainage
+  ctx.fillStyle = '#3c464a'; ctx.font = `${10 * d}px ui-monospace,monospace`;
+  for (let m = 0; m <= 1800; m += 100){ ctx.fillRect(X(m), yc + lane + 2 * d, d, 4 * d); if (m % 500 === 0) ctx.fillText('K' + (m / 1000).toFixed(1), X(m) + 3 * d, yc + lane + 14 * d); }
+  // pods: labels shrink to fit when pods are close together on narrow screens
+  const fit = (txt, maxW) => { if (ctx.measureText(txt).width <= maxW) return txt;
+    while (txt.length > 1 && ctx.measureText(txt + '…').width > maxW) txt = txt.slice(0, -1); return txt + '…'; };
+  const xs = s.pods.map(p => X(p.chainage_m));
+  s.pods.forEach((p, i) => {
+    const x = xs[i], top = yc - lane * 2 - 62 * d, active = p.id === 'POD A' || p.id === s.downstream_pod;
+    const room = Math.min(i > 0 ? x - xs[i - 1] : Infinity, i < xs.length - 1 ? xs[i + 1] - x : Infinity);
+    const bw = Math.max(34 * d, Math.min(76 * d, room - 6 * d)), tight = bw < 76 * d;
+    ctx.fillStyle = '#2b3336'; ctx.fillRect(x - 1.5 * d, top + 26 * d, 3 * d, yc - lane * 2 - top - 26 * d);
+    ctx.fillStyle = p.online ? '#120d00' : '#0a0a0a'; ctx.fillRect(x - bw / 2, top, bw, 24 * d);
+    ctx.strokeStyle = active && p.online ? '#f5b301' : '#2a3337'; ctx.lineWidth = d; ctx.strokeRect(x - bw / 2, top, bw, 24 * d);
+    ctx.fillStyle = p.online ? '#f5b301' : '#4a3a10'; ctx.font = `bold ${(tight ? 10 : 11) * d}px ui-monospace,monospace`; ctx.textAlign = 'center';
+    const face = tight ? p.face.replace(new RegExp('^' + p.id.slice(-1) + ' '), '') : p.face;
+    ctx.fillText(fit(face.slice(0, 9), bw - 6 * d), x, top + 16 * d);
+    ctx.fillStyle = p.online ? '#8a9598' : '#56606a'; ctx.font = `${(tight ? 9.5 : 10.5) * d}px ui-monospace,monospace`;
+    const name = tight ? p.id.replace('POD ', '') : p.id;
+    ctx.fillText(fit(name + (p.online ? '' : ' · dark'), bw), x, top - 5 * d); ctx.textAlign = 'left';
+  });
+  // tower: label flips to the left of the mast if it would run off the edge
+  const tx = X(1780); ctx.strokeStyle = '#3c464a'; ctx.lineWidth = 1.5 * d; ctx.beginPath();
+  ctx.moveTo(tx - 8 * d, yc - lane * 2); ctx.lineTo(tx, 14 * d); ctx.lineTo(tx + 8 * d, yc - lane * 2); ctx.stroke();
+  ctx.fillStyle = '#56606a'; ctx.font = `${10.5 * d}px ui-monospace,monospace`;
+  if (tx + 10 * d + ctx.measureText('TOWER-07').width > W){ ctx.textAlign = 'right'; ctx.fillText('TOWER-07', tx - 10 * d, 24 * d); ctx.textAlign = 'left'; }
+  else ctx.fillText('TOWER-07', tx + 10 * d, 24 * d);
+  // vehicles
+  for (const v of s.vehicles){
+    const x = X(v.p), w = Math.max(3 * d, v.len * (W - 2 * pad) / (PMAX - PMIN));
+    const y = v.state === 'exit' ? yc + lane * 1.2 : yc + (v.lane + 1.85) * lane * .5 - lane * 1.2;
+    const focus = v.track && v.track === s.focus_track;
+    ctx.fillStyle = v.state === 'crash' ? '#ff5a3c' : CLS_COL[v.cls] || '#aaa';
+    ctx.globalAlpha = v.state === 'exit' ? .45 : 1;
+    ctx.fillRect(x - w / 2, y - 4 * d, w, 8 * d);
+    if (v.brake > .3 && v.state !== 'crash'){ ctx.fillStyle = `rgba(255,50,30,${v.brake})`; ctx.fillRect(x - w / 2 - 2 * d, y - 4 * d, 2 * d, 8 * d); }
+    if (focus){ ctx.strokeStyle = '#7aa7ff'; ctx.lineWidth = 1.5 * d; ctx.strokeRect(x - w / 2 - 4 * d, y - 8 * d, w + 8 * d, 16 * d);
+      ctx.fillStyle = '#7aa7ff'; ctx.font = `${10 * d}px ui-monospace,monospace`; ctx.fillText(v.track, Math.max(2 * d, x - w / 2), y + 22 * d); }
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* --------------------------------------------------------------- panels */
+function paintState(s){
+  $('clock').textContent = s.clock;
+  $('roadCap').textContent = s.mode === 'sim'
+    ? 'Ground truth from the traffic model. The detector never sees this view.'
+    : 'Field segment. No traffic model: this segment only knows what pods upload.';
+  document.querySelectorAll('#sc button').forEach(b => { b.classList.toggle('on', b.dataset.sc === s.scenario); b.disabled = s.mode !== 'sim'; });
+  if (document.activeElement !== $('speed')){ $('speed').value = s.speed; $('speedVal').textContent = s.speed + '×'; }
+  drawRoad(s);
+
+  document.body.classList.toggle('is-paused', !!s.paused);
+  const pairedOk = s.downstream_pod === 'POD B';
+  $('pair').className = 'pair' + (s.degraded ? ' stricter' : '');
+  $('pair').innerHTML = `A ↔ ${esc(s.downstream_pod.replace('POD ', ''))} · ${s.segment_m} m · ${s.degraded ? 'stricter' : 'normal'}
+    <small>${s.degraded ? `${esc(s.downstream_pod)} took over. Alerts now need 0.82 confidence instead of 0.66.` : 'POD A and POD B watch this stretch together.'}</small>`;
+  $('pods').innerHTML = s.pods.map(p => {
+    const paired = p.id === 'POD A' || p.id === s.downstream_pod;
+    return `<div class="pod ${p.online ? '' : 'dark'} ${paired ? 'paired' : ''}" title="${p.id} · ${Math.round(p.battery_pct)}% ${p.power} · signal ${p.rssi_dbm} dBm">
+      <span class="who"><b>${p.id}</b><small class="num">K${(p.chainage_m / 1000).toFixed(1)} · ${Math.round(p.battery_pct)}%</small></span>
+      <span class="face">${esc(p.face)}</span>
+      ${p.id === 'POD A' ? '<span></span>' : `<button class="toggle" data-pod="${p.id}" data-on="${!p.online}">${p.online ? 'Take offline' : 'Bring online'}</button>`}
+    </div>`;
+  }).join('');
+
+  const f = s.flow, sp = s.speeds;
+  $('segStats').innerHTML = `
+    <div><b class="num">${s.open_windows}</b>vehicles tracked</div>
+    <div><b class="num">${f.expected_vpm.toFixed(1)} / ${f.observed_vpm.toFixed(1)}</b>veh/min in, out</div>
+    <div><b class="num">${sp.up_kmh.toFixed(0)} / ${sp.down_kmh.toFixed(0)}</b>km/h in, out</div>`;
+  tickWatch(s);
+
+  paintDecision(s);
+}
+
+function paintDecision(s){
+  const x = s.suspicion, el = $('decision');
+  if (!x){ el.innerHTML = '<div class="idle">No candidate open. Every vehicle in the segment is being tracked.</div>'; return; }
+  const badge = !x.settled ? `<span class="badge b-watch">Corroborating · ${x.remaining_s?.toFixed(0) ?? 0} s left</span>`
+    : x.verdict === 'dispatch' ? '<span class="badge b-dispatch">Alert dispatched</span>' : '<span class="badge b-dismiss">Dismissed, no alert</span>';
+  const hi = x.degraded ? .82 : .66, med = x.degraded ? .66 : .35;
+  const P = x.parts || {}, max = {absence:.18, flow:.46, speed:.22, knock_on:.20};
+  const part = (k, label) => `<div class="part"><small>${label}</small><b class="num">${(P[k] ?? 0).toFixed(2)}</b><div class="bar"><i style="width:${((P[k] ?? 0) / max[k] * 100).toFixed(0)}%"></i></div></div>`;
+  el.innerHTML = `
+    <div class="verdict"><span class="evt">${x.evt}</span>${badge}<span style="color:var(--dust)">missing vehicle ${x.opened_by}${x.degraded ? ' · stricter mode' : ''}</span></div>
+    <div class="conf"><span>Confidence</span><b class="num">${x.confidence.toFixed(2)} ${x.tier.toLowerCase()}</b></div>
+    <div class="meter ${x.confidence >= hi ? 'hot' : ''}">
+      <div class="fill" style="width:${(x.confidence * 100).toFixed(1)}%"></div>
+      <div class="tick" style="left:${med * 100}%"><span>Medium</span></div>
+      <div class="tick" style="left:${hi * 100}%"><span>Dispatch</span></div>
+      ${x.degraded ? '' : '<div class="tick" style="left:82%"><span>Early</span></div>'}
+    </div>
+    <div class="parts">${part('absence', 'Absence')}${part('flow', 'Flow shortfall')}${part('speed', 'Speed drop')}${part('knock_on', 'Knock-on misses')}</div>
+    <p class="reason">${esc(x.reason)}</p>
+    <canvas id="spark"></canvas>`;
+  spark(x.history, hi);
+}
+
+function spark(h, hi){
+  const c = $('spark'); if (!c || !h.length) return;
+  const r = c.getBoundingClientRect(), d = devicePixelRatio; c.width = r.width * d; c.height = r.height * d;
+  const g = c.getContext('2d'), W = c.width, H = c.height, n = h.length;
+  const X = i => n < 2 ? W : i / (n - 1) * W;
+  g.strokeStyle = 'rgba(255,255,255,.18)'; g.setLineDash([4 * d, 4 * d]); g.beginPath(); g.moveTo(0, H * (1 - hi)); g.lineTo(W, H * (1 - hi)); g.stroke(); g.setLineDash([]);
+  const mx = Math.max(1, ...h.map(p => Math.max(p.exp, p.act)));
+  const line = (key, col, scale) => { g.strokeStyle = col; g.lineWidth = 1.5 * d; g.beginPath();
+    h.forEach((p, i) => { const y = H - (p[key] / scale) * (H - 4 * d) - 2 * d; i ? g.lineTo(X(i), y) : g.moveTo(X(i), y); }); g.stroke(); };
+  line('exp', '#4a524d', mx); line('act', '#a9a6ff', mx); line('conf', '#ffc857', 1);
+}
+
+/* The API keeps full sentences (hover a line to see one). The log shows a short form. */
+const SHORT = [
+  [/^POD A pass (\S+), (\S+), (\d+) km\/h, window open \((\d+) s\)/, 'A saw $1 · $2 · $3 km/h'],
+  [/^POD B match (\S+), ([+-][\d.]+) s vs predicted, signature ([\d.]+)/, 'B matched $1 · $2 s'],
+  [/^POD B arrival matched no open window, (\S+)/, 'B saw a $1 with no open window'],
+  [/^Missed arrival (\S+) (?:folded into active event|recorded against already-decided) (\S+)/, '$1 missed · counted in $2'],
+  [/^Candidate (\S+) opened by (\S+): .*/, '$1 opened · $2 never reached the next pod'],
+  [/^ALERT DISPATCHED for (\S+): confidence ([\d.]+) (\w+)\. (.*)\./, 'ALERT $1 · $2 $3 · $4'],
+  [/^Candidate (\S+) dismissed: confidence ([\d.]+) (\w+)\. No alert sent\. (.*)\./, 'Cleared $1 · $2 $3 · no alert'],
+  [/^(\S+) re-confirms active incident #(\d+) \(x(\d+)\)\. No duplicate alert sent\./, '$1 confirms incident $2 again (×$3) · no repeat alert'],
+  [/^Relaying incident #(\d+): (.*), then 3 recipients at once/, 'Relay $2'],
+  [/^Transmission complete: (\d)\/3 recipients acknowledged, end-to-end (\d+) ms/, 'Delivered $1/3 · $2 ms'],
+  [/^(POD \w) went dark \((.*?)\)\. Pair re-formed: POD A to (POD \w), (\d+) m\..*/, '$1 dark ($2) · re-paired A↔$3 · $4 m · stricter'],
+  [/^(POD \w) back online \((.*?)\)\. Pair re-formed: POD A to (POD \w), (\d+) m\..*/, '$1 back · re-paired A↔$3 · $4 m · normal'],
+  [/^(\d+) open windows voided: (.*)/, '$1 open windows reset · $2'],
+  [/^\[ground truth\] (.*?)( \(invisible to ANTAR\))?$/, 'Really happened: $1'],
+];
+function short(e){ for (const [re, out] of SHORT) if (re.test(e.text)) return e.text.replace(re, out).replace(/POD (\w)\b/g, 'POD $1'); return e.text; }
+
+let logQueued = false;
+function queueLog(){ if (!logQueued){ logQueued = true; requestAnimationFrame(() => { logQueued = false; paintLog(); }); } }
+function paintLog(){
+  const showPass = $('fPass').checked, showTruth = $('fTruth').checked;
+  const rows = (LOGS[SEG] || []).filter(e => (showPass || !['pass_a', 'match', 'unmatched_arrival'].includes(e.kind)) && (showTruth || e.kind !== 'ground_truth'));
+  $('log').innerHTML = rows.slice(-160).reverse().map(e => `<p class="l-${e.level}" title="${esc(e.text)}"><time>${e.clock.slice(0, 8)}</time><span>${esc(short(e))}</span></p>`).join('');
+}
+$('fPass').onchange = paintLog; $('fTruth').onchange = paintLog;
+
+function paintIncidents(){
+  const list = [...INCIDENTS.values()].filter(i => i.segment === SEG).sort((a, b) => b.id - a.id).slice(0, 25);
+  if (!list.length){ $('inc').innerHTML = '<tr><td colspan="6" class="empty">Nothing decided yet. Run scenario B or C to see a decision recorded here.</td></tr>'; return; }
+  $('inc').innerHTML = list.map(i => {
+    const fresh = !seenInc.has(i.id); seenInc.add(i.id);
+    const alerts = i.alerts.length ? i.alerts.map(a => `${esc(a.recipient)} ${a.status === 'delivered' ? '✓' : '✗'} ${a.latency_ms} ms`).join('<br>') : (i.status === 'dismissed' ? 'None sent, by design' : 'Sending');
+    const act = i.status === 'dispatched' ? `<button data-inc="${i.id}" data-st="acknowledged">Acknowledge</button><button data-inc="${i.id}" data-st="resolved">Resolve</button>`
+      : i.status === 'acknowledged' ? `<button data-inc="${i.id}" data-st="resolved">Resolve</button>` : '';
+    return `<tr class="${fresh ? 'new' : ''}"><td class="num">${i.id}</td>
+      <td><b>${i.evt}</b><div class="alerts">${new Date(i.created_at * 1000).toLocaleTimeString()}${i.reconfirmations ? ` · re-confirmed ×${i.reconfirmations}` : ''}${i.degraded ? ' · degraded' : ''}</div></td>
+      <td><span class="badge ${i.status === 'dismissed' ? 'b-dismiss' : i.status === 'dispatched' ? 'b-dispatch' : 'b-watch'}">${i.status}</span></td>
+      <td class="num">${i.confidence.toFixed(2)} ${i.tier.toLowerCase()}</td>
+      <td class="alerts">${alerts}</td><td><div class="act">${act}</div></td></tr>`;
+  }).join('');
+}
+
+async function loadResponders(){
+  try {
+    const list = await api('GET', `/api/segments/${SEG}/responders`);
+    $('resp').innerHTML = list.length ? list.map(r => `<div><span><b>${esc(r.name)}</b><small>${esc(r.phone)}${r.skills ? ' · ' + esc(r.skills) : ''}</small></span><span class="num">${r.distance_km} km</span>${PUBLIC ? '<span></span>' : `<button data-rid="${r.id}" aria-label="Remove ${esc(r.name)}">Remove</button>`}</div>`).join('')
+      : '<p class="empty">No responders registered. Alerts will go to the hospital and patrol only.</p>';
+  } catch (e) { $('resp').innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+}
+
+/* --------------------------------------------------------------- actions */
+document.addEventListener('click', async ev => {
+  const t = ev.target.closest('button'); if (!t) return;
+  try {
+    if (t.dataset.sc){ await runScenario(t.dataset.sc); }
+    else if (t.dataset.pod){ await api('PUT', `/api/segments/${SEG}/pods/${encodeURIComponent(t.dataset.pod)}`, {online: t.dataset.on === 'true'}); }
+    else if (t.dataset.inc){ await api('PATCH', `/api/incidents/${t.dataset.inc}`, {status: t.dataset.st}); }
+    else if (t.dataset.rid){ await api('DELETE', `/api/responders/${t.dataset.rid}`); loadResponders(); }
+  } catch (e) { toast(e.message); }
+});
+$('speed').oninput = () => { $('speedVal').textContent = $('speed').value + '×'; };
+$('speed').onchange = () => api('PATCH', `/api/segments/${SEG}/sim`, {speed: +$('speed').value}).catch(e => toast(e.message));
+$('segSel').onchange = () => { SEG = $('segSel').value; pref.set('seg', SEG); resetWatch(); paintLog(); paintIncidents(); loadResponders(); if (STATE[SEG]) paintState(STATE[SEG]); };
+$('respForm').onsubmit = async ev => {
+  ev.preventDefault(); $('respErr').textContent = '';
+  const fd = Object.fromEntries(new FormData(ev.target)); fd.distance_km = +fd.distance_km;
+  try { await api('POST', `/api/segments/${SEG}/responders`, fd); ev.target.reset(); loadResponders(); }
+  catch (e) { $('respErr').textContent = e.message; }
+};
+
+/* ---------------------------------------------------------- stopwatch
+   Sim time from the moment the vehicle really stops (ground truth) to the moment ANTAR dispatches. */
+const WATCH = { t0: null, tEnd: null, state: 'idle' };
+function resetWatch(){ Object.assign(WATCH, { t0: null, tEnd: null, state: 'idle' }); $('watch').hidden = true; $('watch').className = 'watch'; }
+function fmt(sec){ sec = Math.max(0, sec); return String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(Math.floor(sec % 60)).padStart(2, '0'); }
+function watchEvent(e){
+  if (e.kind === 'ground_truth' && /stopped/i.test(e.text)){ Object.assign(WATCH, { t0: e.t, tEnd: null, state: 'run' }); $('watch').hidden = false; $('watchLabel').textContent = 'Time since crash'; }
+  if (e.kind === 'ground_truth' && /turned onto/i.test(e.text)){ resetWatch(); }
+  if (e.kind === 'candidate_opened' && (WATCH.state === 'sent' || WATCH.state === 'cleared')){ resetWatch(); }
+  if (e.kind === 'decision' && WATCH.state === 'run' && e.suspicion){
+    WATCH.tEnd = e.suspicion.t_settle ?? e.t;
+    WATCH.state = e.suspicion.verdict === 'dispatch' ? 'sent' : 'cleared';
+    $('watch').className = 'watch ' + WATCH.state;
+    $('watchLabel').textContent = WATCH.state === 'sent' ? 'Alert sent after' : 'Decided after';
+    $('watchVal').textContent = fmt(WATCH.tEnd - WATCH.t0);
+  }
+}
+function tickWatch(s){ if (WATCH.state === 'run' && WATCH.t0 != null) $('watchVal').textContent = fmt(s.t - WATCH.t0); }
+
+async function runScenario(sc){
+  if (STATE[SEG]?.mode !== 'sim'){ toast('Scenarios only run on the simulated segment.'); return; }
+  await api('POST', `/api/segments/${SEG}/scenario/${sc}`);
+  LOGS[SEG] = []; paintLog(); resetWatch();
+  if (GUIDE.open && GUIDE.i === 0 && sc === 'B') guideGo(1);
+}
+
+/* ------------------------------------------------------------ presenter */
+function setPresenter(on){ document.body.classList.toggle('presenter', on); $('presentBtn').setAttribute('aria-pressed', on); pref.set('presenter', on ? '1' : '0'); if (STATE[SEG]) paintState(STATE[SEG]); }
+$('presentBtn').onclick = () => setPresenter(!document.body.classList.contains('presenter'));
+if (pref.get('presenter', '0') === '1') setPresenter(true);
+
+/* ---------------------------------------------------------------- guide */
+const STEPS = [
+  { el: 'sc', title: 'Start a crash', text: 'Tap B (or press B). A vehicle will stop on the road. ANTAR is never told this happened.' },
+  { el: 'colDecision', title: 'Watch it work it out', text: 'The car never reaches the next pod, and the traffic behind it slows. The clock shows how long ANTAR takes to raise the alert.' },
+  { el: 'pods', title: 'Break a pod', text: 'Take POD B offline. POD A pairs with POD C and becomes stricter, so it still never raises a false alarm.' },
+  { el: 'inc', title: 'Everything is recorded', text: 'Every decision stays here, including cleared ones. Shortcuts: A B C scenarios, Space pause, K acknowledge, P present, S sound.' },
+];
+const GUIDE = { open: false, i: 0 };
+function guideGo(i){
+  document.querySelectorAll('.spot').forEach(n => n.classList.remove('spot'));
+  if (i >= STEPS.length){ closeGuide(); return; }
+  GUIDE.i = i; const st = STEPS[i];
+  $('gStep').textContent = `${i + 1} / ${STEPS.length}`; $('guideTitle').textContent = st.title; $('guideText').textContent = st.text;
+  $('gNext').textContent = i === STEPS.length - 1 ? 'Done' : 'Next';
+  const target = $(st.el); target.classList.add('spot'); if (i > 0) target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+function openGuide(){ GUIDE.open = true; $('guide').hidden = false; guideGo(0); }
+function closeGuide(){ GUIDE.open = false; $('guide').hidden = true; document.querySelectorAll('.spot').forEach(n => n.classList.remove('spot')); pref.set('guide-seen', '1'); }
+$('gNext').onclick = () => guideGo(GUIDE.i + 1);
+$('gSkip').onclick = closeGuide;
+$('guideBtn').onclick = () => GUIDE.open ? closeGuide() : openGuide();
+if (pref.get('guide-seen', '0') !== '1') setTimeout(openGuide, 900);
+
+/* ------------------------------------------------------------ keyboard */
+addEventListener('keydown', ev => {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.target.closest('input, select, textarea')) return;
+  const k = ev.key.toLowerCase();
+  if (['a', 'b', 'c'].includes(k)){ ev.preventDefault(); runScenario(k.toUpperCase()).catch(e => toast(e.message)); }
+  else if (k === ' '){ ev.preventDefault(); const st = STATE[SEG]; if (st?.mode === 'sim') api('PATCH', `/api/segments/${SEG}/sim`, { paused: !st.paused }).catch(e => toast(e.message)); }
+  else if (k === 'k' && alarmInc != null){ ev.preventDefault(); $('alarmAck').click(); }
+  else if (k === 'p'){ ev.preventDefault(); $('presentBtn').click(); }
+  else if (k === 's'){ ev.preventDefault(); $('soundBtn').click(); }
+  else if (k === '?' || (k === '/' && ev.shiftKey)){ ev.preventDefault(); $('guideBtn').click(); }
+  else if (k === 'escape' && GUIDE.open){ closeGuide(); }
+});
+
+let PUBLIC = false;
+api('GET', '/api/health').then(h => {
+  PUBLIC = !!h.public_demo;
+  if (PUBLIC){   // the API refuses these on the public demo, so do not offer them
+    $('respForm').outerHTML = '<p class="public-note">Registering responders is switched off on the public demo, because it stores phone numbers. Run ANTAR locally to try it.</p>';
+    loadResponders();
+  }
+}).catch(() => {});
+connect(); loadResponders();
+</script>
+</body>
+</html>

@@ -1,0 +1,887 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ANTAR — Roadside Safety Pod / ESP32 Simulation</title>
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#071017;font-family:Inter,Arial,sans-serif}
+canvas{display:block}
+#loading{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:#071017;color:#a9f5ff;font-weight:900;letter-spacing:2px}
+#ui{position:fixed;left:16px;top:16px;z-index:10;display:flex;align-items:center;gap:7px;background:#071117e8;border:1px solid #2b4852;border-radius:13px;padding:9px 11px;box-shadow:0 12px 35px #0009;backdrop-filter:blur(10px)}
+button{border:1px solid #31545e;background:#10232a;color:#d9fbff;border-radius:8px;padding:9px 12px;font-weight:850;cursor:pointer}
+button:hover{background:#17353f}
+button.primary{background:#158a68;border-color:#42d9ac;color:#02150f}
+#status{font-size:11px;letter-spacing:.8px;font-weight:900;color:#b9dce2;margin-left:3px}
+#info{position:fixed;right:16px;top:16px;z-index:10;background:#071117e8;border:1px solid #2b4852;border-radius:13px;padding:10px 13px;color:#b8d8de;font:11px/1.65 ui-monospace,monospace;box-shadow:0 12px 35px #0009}
+#help{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:10;color:#a9c8cf;background:#071117e8;border:1px solid #29434b;border-radius:10px;padding:8px 13px;font-size:11px;white-space:nowrap}
+#sensorDetails{position:fixed;right:16px;top:168px;width:330px;z-index:11;background:rgba(7,17,23,.94);border:1px solid #34505a;border-radius:13px;padding:12px 13px;box-shadow:0 12px 35px #0009;backdrop-filter:blur(12px);display:none;max-height:56vh;overflow:auto}
+#sensorDetails.show{display:block}
+#sensorDetails .sd-head{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #263d44;padding-bottom:8px;margin-bottom:9px}
+#sensorDetails .sd-title{color:#e9fbff;font-weight:900;font-size:12px;letter-spacing:.12em}
+#sensorDetails .sd-chip{font-size:9px;color:#071117;padding:3px 6px;border-radius:5px;font-weight:900}
+#sensorDetails .sd-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:10px}
+#sensorDetails .sd-btn{font:inherit;font-size:9px;padding:6px 4px;background:#0d1d23;color:#94b4bb;border:1px solid #28424a;border-radius:6px;cursor:pointer}
+#sensorDetails .sd-btn:hover{background:#173038;color:#e8fbff}
+#sensorDetails .sd-btn.active{border-color:#36d6c9;color:#b9fff6;background:#0d2b2a}
+#sensorDetails .sd-label{color:#5d7a81;font-size:9px;letter-spacing:.14em;margin:8px 0 3px}
+#sensorDetails .sd-body{color:#b8ced2;font-size:10.5px;line-height:1.55}
+#sensorDetails .sd-row{display:grid;grid-template-columns:72px 1fr;gap:7px;margin-top:5px}
+#sensorDetails .sd-row b{color:#d7edf0;font-weight:700}
+#sensorDetails .sd-route{margin-top:9px;padding:7px 8px;background:#091419;border:1px solid #20353c;border-left:3px solid #26e58b}
+</style>
+</head>
+<body>
+<div id="loading">INITIALISING ANTAR POD…</div>
+
+<div id="ui">
+ <button id="podButton" class="primary">OPEN POD</button>
+ <button id="simButton">TRANSMIT</button>
+ <button id="resetButton">RESET</button>
+ <span id="status">SEALED • STANDBY</span>
+</div>
+
+
+<div id="wiringLegend" style="position:fixed;left:16px;top:100px;z-index:10;background:#071117e8;border:1px solid #2b4852;border-radius:11px;padding:9px 11px;color:#b8d8de;font:10px/1.65 ui-monospace,monospace;box-shadow:0 12px 35px #0009">
+ <b style="color:#e8fbff">WIRING CODE</b><br>
+ <span style="color:#ff334e">● POWER +VBAT</span><br>
+ <span style="color:#a9b1b5">● GND</span><br>
+ <span style="color:#26e58b">● SENSOR / GPIO</span><br>
+ <span style="color:#36a5ff">● DISPLAY / DATA</span><br>
+ <span style="color:#c77dff">● RF / ANTENNA</span><br>
+ <span style="color:#ffd34d">● CONTROL</span>
+</div>
+
+<div id="info">
+ <b style="color:#e8fbff">ANTAR A</b> <span style="opacity:.6">· concept model, nothing built</span><br>
+ESP32: CONCEPT<br>
+ULTRASONIC: 2CH<br>
+CAMERA: EXPANSION SLOT<br>
+RF LINK: CONCEPT<br>
+RADIO: STANDBY<br>
+HARNESS: 22 LINKS<br>
+SPEED: 0.0 km/h<br>
+TEMP: 34.6°C
+</div>
+<div id="sensorDetails">
+  <div class="sd-head"><div class="sd-title">COMPONENT INSPECTION</div><div id="sdChip" class="sd-chip" style="background:#26e58b">CONCEPT</div></div>
+  <div class="sd-grid">
+    <button class="sd-btn" data-sel="ULTRASONIC SPEED TX">US TX</button>
+    <button class="sd-btn" data-sel="ULTRASONIC SPEED RX">US RX</button>
+    <button class="sd-btn" data-sel="CAMERA">CAMERA</button>
+    <button class="sd-btn" data-sel="SIGNAL CATCHER">RF</button>
+  </div>
+  <div class="sd-label">SELECTED COMPONENT</div>
+  <div id="sdName" class="sd-body">Open the pod and click a sensor to inspect it.</div>
+  <div class="sd-label">WHAT IT DOES</div>
+  <div id="sdDoes" class="sd-body">The 3D model exposes the physical sensing and communication hardware.</div>
+  <div class="sd-label">HOW IT WORKS</div>
+  <div id="sdHow" class="sd-body">Select a component to see the operating chain.</div>
+  <div class="sd-label">OUTPUT TO ANTAR</div>
+  <div id="sdOut" class="sd-body">—</div>
+  <div class="sd-route"><div class="sd-label" style="margin:0 0 3px">CONNECTIONS</div><div id="sdRoute" class="sd-body">—</div></div>
+  <div class="sd-label">DEMO STATUS</div>
+  <div id="sdDemo" class="sd-body">—</div>
+</div>
+
+<div id="help">Click pod = open • Click sensor = rotate + inspect • TRANSMIT = antenna ripple • Drag = orbit • Wheel = zoom</div>
+
+<script src="../assets/vendor/three-r128.min.js"></script>
+<script>window.THREE || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>')</script>
+<script>
+(()=> {
+if(!window.THREE){document.getElementById('loading').textContent='Three.js could not load.';return;}
+const T=THREE;
+const scene=new T.Scene();
+scene.background=new T.Color(0x02050a);
+scene.fog=new T.Fog(0x02050a,32,85);
+
+const camera=new T.PerspectiveCamera(42,innerWidth/innerHeight,.1,160);
+const renderer=new T.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=T.PCFSoftShadowMap;
+renderer.outputEncoding=T.sRGBEncoding;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new T.HemisphereLight(0xd8f8ff,0x101820,1.7));
+const key=new T.DirectionalLight(0xffffff,3.2);
+key.position.set(8,15,11);key.castShadow=true;scene.add(key);
+const cold=new T.PointLight(0x42dcff,2.0,35);cold.position.set(-2,6,8);scene.add(cold);
+const fill=new T.PointLight(0x4278ff,1.1,30);fill.position.set(8,2,-8);scene.add(fill);
+
+const floor=new T.Mesh(
+ new T.PlaneGeometry(90,90),
+ new T.MeshStandardMaterial({color:0x05090d,roughness:.96})
+);
+floor.rotation.x=-Math.PI/2;floor.position.y=-4.7;floor.receiveShadow=true;scene.add(floor);
+const grid=new T.GridHelper(50,50,0x16252d,0x0c171d);grid.position.y=-4.68;scene.add(grid);
+/* Starry-night sky: sparse, depth-layered points instead of a flat color. */
+const starGeo=new T.BufferGeometry();
+const starPos=[];
+const starCol=[];
+const starCount=520;
+for(let i=0;i<starCount;i++){
+  const r=42+Math.random()*28;
+  const a=Math.random()*Math.PI*2;
+  const elev=.12+Math.random()*1.15;
+  const x=Math.cos(a)*r*Math.cos(elev);
+  const y=8+Math.sin(elev)*r*.62;
+  const z=Math.sin(a)*r*Math.cos(elev);
+  starPos.push(x,y,z);
+  const c=0.62+Math.random()*.38;
+  starCol.push(c,c,c*.92);
+}
+starGeo.setAttribute('position',new T.Float32BufferAttribute(starPos,3));
+starGeo.setAttribute('color',new T.Float32BufferAttribute(starCol,3));
+const starMat=new T.PointsMaterial({
+  size:.10,sizeAttenuation:true,vertexColors:true,transparent:true,opacity:.9,
+  depthWrite:false
+});
+const starsPts=new T.Points(starGeo,starMat);
+scene.add(starsPts);
+
+/* A few larger stars add scale and depth. */
+const bigStarGeo=new T.BufferGeometry(), bigPos=[];
+for(let i=0;i<70;i++){
+  const r=45+Math.random()*22, a=Math.random()*Math.PI*2, elev=.18+Math.random()*1.0;
+  bigPos.push(Math.cos(a)*r*Math.cos(elev),9+Math.sin(elev)*r*.55,Math.sin(a)*r*Math.cos(elev));
+}
+bigStarGeo.setAttribute('position',new T.Float32BufferAttribute(bigPos,3));
+scene.add(new T.Points(bigStarGeo,new T.PointsMaterial({
+  color:0xbfefff,size:.18,sizeAttenuation:true,transparent:true,opacity:.75,depthWrite:false
+})));
+
+
+const root=new T.Group();scene.add(root);
+const podGlow=new T.PointLight(0xff6a22,1.35,16);
+podGlow.position.set(0,-2.8,2.0);
+scene.add(podGlow);
+
+const shell=new T.Group();root.add(shell);
+const internals=new T.Group();root.add(internals);
+const hardware=new T.Group();root.add(hardware);
+const waves=new T.Group();root.add(waves);
+
+function M(c,m=.3,r=.4,e=0,ei=0){
+ return new T.MeshStandardMaterial({color:c,metalness:m,roughness:r,emissive:e,emissiveIntensity:ei});
+}
+function box(w,h,d,c,x,y,z,p=root,m=.3,r=.4){
+ const o=new T.Mesh(new T.BoxGeometry(w,h,d),M(c,m,r));
+ o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;p.add(o);return o;
+}
+function cyl(r,h,c,x,y,z,p=root,m=.4,rgh=.3){
+ const o=new T.Mesh(new T.CylinderGeometry(r,r,h,28),M(c,m,rgh));
+ o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;p.add(o);return o;
+}
+function tube(points,c,w=.05,p=root){
+ const curve=new T.CatmullRomCurve3(points.map(a=>new T.Vector3(...a)));
+ const o=new T.Mesh(new T.TubeGeometry(curve,40,w,8,false),M(c,.45,.22,c,.25));
+ o.castShadow=true;p.add(o);return {mesh:o,curve};
+}
+function glow(c,r,pos,p=root){
+ const o=new T.Mesh(new T.SphereGeometry(r,18,12),M(c,.15,.2,c,1.2));
+ o.position.copy(pos);p.add(o);return o;
+}
+function textSprite(text,scale=.4){
+ const c=document.createElement('canvas');c.width=900;c.height=150;
+ const g=c.getContext('2d');
+ g.fillStyle='rgba(3,9,13,.90)';g.fillRect(0,0,900,150);
+ g.strokeStyle='#31535d';g.lineWidth=4;g.strokeRect(2,2,896,146);
+ g.fillStyle='#d8f9ff';g.font='900 38px Arial';g.textAlign='center';g.textBaseline='middle';
+ g.fillText(text,450,75);
+ const s=new T.Sprite(new T.SpriteMaterial({map:new T.CanvasTexture(c),transparent:true}));
+ s.scale.set(scale*4.4,scale*.73,1);return s;
+}
+function label(t,x,y,z,s=.3,p=root){let a=textSprite(t,s);a.position.set(x,y,z);p.add(a);return a;}
+
+/* ==========================================================
+   CLOSED POD — based on the supplied tiny reference:
+   compact rectangular industrial enclosure, raised top,
+   small front status/display area, muted field-equipment look.
+   ========================================================== */
+const closed=new T.Group();shell.add(closed);
+
+const body=box(10.4,5.8,4.25,0xa64a17,0,-.1,0,closed,.75,.32);
+const bodyInset=box(9.7,5.1,4.0,0x35170a,0,-.1,.12,closed,.7,.3);
+/* Rugged enclosure details: seam lines, corner fasteners, bumper feet. */
+const seamMat = new T.MeshStandardMaterial({color:0x0b1318,metalness:.65,roughness:.3});
+for(const x of [-4.35,4.35]){
+ const seam=box(.055,4.7,.045,0x081015,x,-.15,2.31,closed,.55,.25);
+ seam.material=seamMat;
+}
+for(const x of [-4.75,4.75]) for(const y of [-2.55,2.45]){
+ const bolt=cyl(.10,.08,0x9aa7a9,x,y,2.34,closed,.8,.2); bolt.rotation.x=Math.PI/2;
+}
+for(const x of [-4.2,-1.4,1.4,4.2]) cyl(.13,.34,0x121a1e,x,-3.07,1.7,closed,.7,.45);
+const topVent=box(4.1,.12,.72,0x17262c,0,3.55,-.2,closed,.7,.28);
+for(let i=0;i<9;i++) box(.16,.10,.5,0x020608,-1.45+i*.36,3.64,-.2,closed,.75,.25);
+
+
+// Slightly raised roof, matching the reference silhouette.
+const roof=box(10.0,.55,4.0,0xc76622,0,3.08,0,closed,.75,.3);
+const roofTop=box(8.9,.16,3.35,0xe18a42,0,3.43,-.03,closed,.75,.28);
+
+// Front face and recessed display.
+const front=box(8.9,4.55,.22,0x23100a,0,-.25,2.16,closed,.65,.25);
+const frontTrimTop=box(8.35,.08,.08,0xf08a2d,0,1.98,2.48,closed,.65,.22);
+const frontTrimBottom=box(8.35,.08,.08,0x7d2c0d,0,-2.50,2.48,closed,.65,.24);
+
+const displayFrame=box(4.7,2.25,.24,0x170905,-.4,.15,2.34,closed,.75,.18);
+const display=box(4.25,1.82,.04,0x182a2a,-.4,.15,2.49,closed,.2,.15);
+
+// Tiny front indicators.
+for(let i=0;i<4;i++){
+ const led=glow(i===0?0xffc43d:(i===1?0x28e890:0x45bfff),.055,
+  new T.Vector3(-2.55+i*.28,1.42,2.52),closed);
+}
+
+// Front labels.
+label('POD A',-3.0,3.75,2.0,.27,closed);
+label('A CAR 81',2.6,3.75,2.0,.27,closed);
+
+// Display texture.
+const dc=document.createElement('canvas');dc.width=850;dc.height=360;
+const dg=dc.getContext('2d');const dtex=new T.CanvasTexture(dc);
+const dmat=new T.MeshBasicMaterial({map:dtex});
+display.material=dmat;
+function drawDisplay(alert=false){
+ dg.fillStyle='#071417';dg.fillRect(0,0,850,360);
+ dg.strokeStyle=alert?'#ff4258':'#39d8d2';dg.lineWidth=5;dg.strokeRect(14,14,822,332);
+ dg.fillStyle=alert?'#ff6675':'#d6fbff';dg.font='900 38px monospace';
+ dg.fillText(alert?'!! INCIDENT !!':'ANTAR // A CAR 81',35,65);
+ dg.fillStyle='#8fcbd0';dg.font='700 25px monospace';
+ dg.fillText('ESP32  ONLINE',35,112);
+ dg.fillText('T  34.6 C',35,153);
+ dg.fillText('SENSORS  4/4',35,194);
+ dg.fillText('RADIO  '+(alert?'TX ACTIVE':'STANDBY'),35,235);
+ dg.fillStyle=alert?'#ff3f58':'#20e58a';dg.fillRect(35,285,alert?700:500,18);
+ dtex.needsUpdate=true;
+}
+drawDisplay(false);
+
+/* ==========================================================
+   SENSOR ARRAY
+   1) Ultrasonic speed detector TX
+   2) Ultrasonic speed detector RX
+   3) Forward camera
+   4) Signal catcher / RF antenna
+   ========================================================== */
+const sensors=[];
+function sensorPort(x,y,z){
+ const hole=new T.Mesh(new T.CylinderGeometry(.42,.42,.22,32),M(0x020608,.78,.22));
+ hole.rotation.z=Math.PI/2;hole.position.set(x,y,z);hardware.add(hole);
+ const ring=new T.Mesh(new T.TorusGeometry(.38,.085,12,30),M(0x65777a,.72,.2));
+ ring.rotation.y=Math.PI/2;ring.position.set(x+(x<0?.03:-.03),y,z);hardware.add(ring);
+}
+function addUltrasonic(name,z,side){
+ const g=new T.Group();hardware.add(g);
+ const x=side==='L'?-5.25:5.25;
+ g.userData={name,side,z,angle:1.0,type:'ultrasonic',baseX:x,baseZ:z};
+ sensorPort(x,0,z);
+ const collar=box(.38,.68,.68,0x2e4c55,x+(side==='L'?.22:-.22),0,z,g,.65,.25);
+ collar.rotation.y=side==='L'?.1:-.1;
+ for(let j=0;j<2;j++){
+  const trans=glow(0x4fe5ff,.15,new T.Vector3(
+    x+(side==='L'?.82:-.82),0,z-.19+j*.38),g);
+  g.userData.transducer=trans;
+ }
+ const hood=box(.42,.86,.86,0x6a7e82,x+(side==='L'?.72:-.72),0,z,g,.7,.28);
+ hood.rotation.y=side==='L'?.12:-.12;
+ g.userData.head=hood;
+ g.userData.homeX=x;g.userData.homeZ=z;
+ sensors.push(g);
+ return g;
+}
+const usTx=addUltrasonic('ULTRASONIC SPEED TX',1.68,'L');
+const usRx=addUltrasonic('ULTRASONIC SPEED RX',1.68,'R');
+
+/* Forward optical camera: lens, hood, focus ring and glass. */
+function addCamera(){
+ const g=new T.Group();hardware.add(g);
+ const z=0;
+ g.userData={name:'CAMERA',side:'F',z,angle:0,type:'camera',baseX:0,baseZ:0};
+ const housing=box(1.55,1.12,.95,0x1e2b30,0,-.25,2.36,g,.7,.25);
+ const hood=box(.88,.76,.28,0x0b1216,0,-.25,2.95,g,.8,.2);
+ hood.rotation.x=-.08;
+ const ring=new T.Mesh(new T.TorusGeometry(.30,.09,16,36),M(0x8a9da1,.8,.18));
+ ring.rotation.x=Math.PI/2;ring.position.set(0,-.25,3.12);g.add(ring);
+ const lens=glow(0x28b6ff,.24,new T.Vector3(0,-.25,3.15),g);
+ const glint=new T.Mesh(new T.CircleGeometry(.105,24),new T.MeshBasicMaterial({color:0xbff7ff,transparent:true,opacity:.9}));
+ glint.position.set(-.08,-.16,3.31);g.add(glint);
+ g.userData.head=housing;g.userData.lens=lens;
+ sensors.push(g);
+ return g;
+}
+const cam=addCamera();
+
+/* Signal catcher: loop + short RF mast. */
+function addSignalCatcher(){
+ const g=new T.Group();hardware.add(g);
+ const z=-1.8,x=0;
+ g.userData={name:'SIGNAL CATCHER',side:'F',z,angle:0,type:'signal',baseX:x,baseZ:z};
+ const stem=box(.46,.35,.46,0x394b50,0,-.25,1.95,g,.7,.25);
+ const mast=cyl(.07,1.25,0xa3b1b3,0,.35,1.95,g,.8,.18);
+ const loop=new T.Mesh(new T.TorusGeometry(.52,.055,12,32),M(0x67cde0,.65,.22));
+ loop.rotation.x=Math.PI/2;loop.position.set(0,.95,1.95);g.add(loop);
+ const feed=glow(0x56eaff,.10,new T.Vector3(0,.95,1.95),g);
+ g.userData.head=loop;g.userData.mast=mast;g.userData.lens=feed;
+ sensors.push(g);
+ return g;
+}
+const catcher=addSignalCatcher();
+
+/* Component-level inspection data shown inside the 3D pod viewer. */
+const SENSOR_DETAILS={
+ 'ULTRASONIC SPEED TX':{
+  chip:'RANGE TX', color:'#36dfff',
+  does:'Emits a short ultrasonic burst into the sensing zone to create the ranging signal.',
+  how:'TX sends a pulse → the vehicle reflects energy → the paired RX channel listens for the return → repeated observations support speed estimation.',
+  out:'Pulse timing / presence event + timestamp. In the road simulator, the resulting pod event carries measured speed.',
+  route:'GREEN GPIO → sensor I/O · RED +VBAT · BLACK GND',
+  demo:'Animated ultrasonic pulses appear when transmission is active.'
+ },
+ 'ULTRASONIC SPEED RX':{
+  chip:'RANGE RX', color:'#36dfff',
+  does:'Receives the reflected ultrasonic energy from the vehicle and provides the paired measurement channel.',
+  how:'RX listens after TX emits → echo timing changes as the vehicle moves → repeated measurements form the speed/range estimate.',
+  out:'Echo timing / detection event used with TX observations and timestamping.',
+  route:'GREEN GPIO → sensor I/O · RED +VBAT · BLACK GND',
+  demo:'Paired with the TX module; the model shows the sensing direction and connection path.'
+ },
+ 'CAMERA':{
+  chip:'OPTICAL', color:'#5fb8ff',
+  does:'Provides visual context for the physical pod concept: road scene, vehicle context and future local verification.',
+  how:'Lens captures the local scene → local processing can classify or verify context before any information leaves the pod.',
+  out:'Visual context / future verification input. The current road-safety simulator does not use camera footage as a detector input.',
+  route:'GREEN GPIO → controller · RED +VBAT · BLACK GND',
+  demo:'Lens and housing are inspectable and manually aimable; no live vision model is claimed in this demo.'
+ },
+ 'SIGNAL CATCHER':{
+  chip:'RF LINK', color:'#c77dff',
+  does:'Models the proposed pod-to-pod radio link and receives/transmits the network message path.',
+  how:'ESP32/radio creates a packet → RF feed drives the antenna → neighbouring pod receives it → the chain can hand off toward existing tower coverage.',
+  out:'Radio link state, relay hops and transmission acknowledgement.',
+  route:'PURPLE RF feed → antenna · YELLOW enable · RED +VBAT · BLACK GND',
+  demo:'TRANSMIT activates the strong expanding RF ripple around the antenna.'
+ }
+};
+
+/* Ultrasonic ranging visualization in front of the pod. */
+const ultrasonicPulses=[];
+for(let i=0;i<10;i++){
+ const q=new T.Mesh(new T.RingGeometry(.14,.20,48),new T.MeshBasicMaterial({
+  color:0x3ee8ff,transparent:true,opacity:0,side:T.DoubleSide,depthWrite:false
+ }));
+ q.position.set(-3.95,-.1,4.0);q.rotation.x=-Math.PI/2;hardware.add(q);
+ ultrasonicPulses.push(q);
+}
+
+/* Sensor role labels. */
+label('ULTRASONIC TX',-6.0,2.5,1.9,.22,hardware);
+label('ULTRASONIC RX',6.0,2.5,1.9,.22,hardware);
+label('OPTICAL CAMERA',0,1.2,2.8,.22,hardware);
+label('RF SIGNAL CATCHER',0,2.3,1.9,.22,hardware);
+
+/* ==========================================================
+   INTERNALS — revealed only after the enclosure separates.
+   Mix of realistic PCB + visible modules + micro components.
+   ========================================================== */
+internals.visible=false;
+
+// Backplate / mounting frame.
+box(9.4,.22,3.65,0x0a1115,0,-.1,0,internals,.7,.28);
+for(const x of [-4.1,4.1])for(const z of [-1.35,1.35])cyl(.16,.16,0x99a6a9,x,0,z,internals,.7,.2);
+
+// ESP32 board.
+const esp=new T.Group();internals.add(esp);
+box(5.7,.24,2.55,0x0d392f,0,-.15,0,esp,.55,.32);
+box(1.45,.18,1.05,0x8e989b,-.55,.12,0,esp,.8,.22);
+box(1.08,.05,.72,0x59666a,-.55,.24,0,esp,.75,.22);
+
+// ESP32 module antenna trace.
+for(let i=0;i<8;i++)box(.10,.025,.25,0x7b8b8e,-1.32+i*.18,.27,.48,esp,.75,.2);
+
+// Main ICs and passives.
+box(.55,.08,.48,0x12181c,1.25,.05,.45,esp,.8,.2);
+box(.42,.08,.42,0x12181c,1.9,.05,-.4,esp,.8,.2);
+box(.32,.07,.38,0x13191c,-2.0,.05,-.55,esp,.8,.2);
+for(let i=0;i<18;i++){
+ const x=-2.5+i*.29;
+ cyl(.025,.14,0xc8d5d7,x,.08,-1.0,esp,.75,.2);
+ cyl(.025,.14,0xc8d5d7,x,.08,1.0,esp,.75,.2);
+}
+
+/* Copper-trace styling for exposed PCB. */
+for(let i=0;i<7;i++){
+ const tr=tube([[-2.8,.135,-.75+i*.24],[-1.6,.16,-.75+i*.20],[.15,.18,-.45+i*.15]],
+  i%2?0x9b6b3d:0xb47a43,.018,esp);
+}
+
+
+// USB + reset/boot.
+box(.62,.22,.75,0xbec7c8,-2.85,-.02,0,esp,.75,.2);
+cyl(.10,.10,0x20272a,2.4,.08,.5,esp);
+cyl(.10,.10,0x20272a,2.4,.08,-.5,esp);
+
+// Battery pack.
+const battery=new T.Group();internals.add(battery);
+box(2.7,1.55,2.45,0x20292e,3.15,-.2,0,battery,.7,.3);
+for(let i=0;i<3;i++)cyl(.47,1.3,0x4b555b,2.55+i*.62,.12,0,battery,.7,.28);
+box(2.25,.08,1.9,0x11171b,3.15,.67,0,battery,.5,.3);
+
+// Sensor I/O board.
+const io=new T.Group();internals.add(io);
+box(2.65,.26,1.9,0x15523d,-3.25,-.25,0,io,.5,.32);
+for(let i=0;i<7;i++)cyl(.055,.11,0x43efaa,-4.15+i*.3,-.08,.55,io,.7,.2);
+box(.42,.09,.42,0x11191a,-3.0,-.06,-.45,io,.75,.2);
+box(.5,.09,.32,0x11191a,-2.15,-.06,.35,io,.75,.2);
+
+
+// Internal display controller / driver board.
+const displayBoard=new T.Group();internals.add(displayBoard);
+box(2.9,.20,1.8,0x17353b,-.15,1.48,-1.02,displayBoard,.55,.3);
+box(2.35,.05,1.22,0x0b2328,-.15,1.60,-1.02,displayBoard,.35,.25);
+box(.72,.08,.50,0x121a1e,-.95,1.66,-1.02,displayBoard,.75,.2);
+box(.44,.08,.38,0x121a1e,.05,1.66,-.72,displayBoard,.75,.2);
+box(.44,.08,.38,0x121a1e,.72,1.66,-1.28,displayBoard,.75,.2);
+for(let i=0;i<8;i++) cyl(.028,.12,0xd1e2e4,-1.05+i*.25,1.62,-1.74,displayBoard,.7,.2);
+label('STATUS DISPLAY I/O',-.15,2.22,-1.02,.23,internals);
+
+// Radio module.
+const radio=new T.Group();internals.add(radio);
+box(2.2,.22,1.55,0x162f46,3.0,1.25,0,radio,.6,.3);
+box(1.5,.05,1.0,0x2b5476,3.0,1.39,0,radio,.45,.28);
+for(let i=0;i<5;i++)box(.06,.02,.55,0x74b8d5,2.35+i*.18,1.43,.35,radio,.6,.2);
+
+// Physical ESP32 antenna rising from radio.
+const antenna=new T.Group();hardware.add(antenna);
+const antBase=cyl(.25,.18,0x222c31,3.95,1.2,0,antenna,.75,.2);
+const antRod=cyl(.085,2.15,0x9aa6a8,3.95,2.25,0,antenna,.8,.2);
+const antTip=glow(0x56eaff,.12,new T.Vector3(3.95,3.35,0),antenna);
+const antLight=new T.PointLight(0x3bdfff,0,8);antLight.position.copy(antTip.position);antenna.add(antLight);
+label('ESP32 ANTENNA',4.0,3.75,0,.25,hardware);
+
+/* ==========================================================
+   HARD-WIRED HARNESS — CLEANER BUNDLES
+   Functional routes stay inside the chassis volume; only short
+   flexible sleeves leave the sensor housings in exploded mode.
+   ========================================================== */
+const harness=[];
+function H(points,color,name,width=.055){
+  const w=tube(points,color,width,internals);
+  w.mesh.userData.name=name;
+  w.mesh.material.emissive.setHex(color);
+  w.mesh.material.emissiveIntensity=.07;
+  harness.push(w);
+  return w;
+}
+function terminal(x,y,z,color,parent=internals){
+  cyl(.09,.13,color,x,y,z,parent,.72,.22);
+  glow(color,.055,new T.Vector3(x,y+.08,z),parent);
+}
+
+const bus=new T.Group();internals.add(bus);
+box(1.8,.15,2.25,0x18272c,-.15,.18,.02,bus,.6,.25);
+for(let i=0;i<7;i++){
+  cyl(.05,.16,0xc8d4d6,-.68+i*.18,.28,.92,bus,.75,.2);
+  cyl(.05,.16,0xc8d4d6,-.68+i*.18,.28,-.92,bus,.75,.2);
+}
+label('POWER / I/O BUS',-.15,.63,.02,.22,internals);
+
+terminal(-.15,.36,1.16,0xff334e);
+terminal(-.15,.36,-1.16,0x11181c);
+
+/* SENSOR SIGNALS: short, high-clearance runs. */
+H([[-4.72,.05,1.68],[-4.05,.12,1.34],[-3.38,.18,.55]],0x26e58b,'ULTRASONIC TX / GPIO',.050);
+H([[-4.72,.05,1.55],[-4.08,.04,1.02],[-3.38,.18,.82]],0xff334e,'ULTRASONIC TX / POWER',.046);
+H([[-4.72,.05,1.81],[-4.08,-.02,1.48],[-3.38,.18,-.78]],0x11181c,'ULTRASONIC TX / GND',.042);
+
+H([[4.72,.05,1.68],[4.05,.16,1.30],[-3.10,.24,.25]],0x26e58b,'ULTRASONIC RX / GPIO',.050);
+H([[4.72,.05,1.55],[4.08,.10,1.04],[-3.10,.24,.68]],0xff334e,'ULTRASONIC RX / POWER',.046);
+H([[4.72,.05,1.81],[4.08,.02,1.46],[-3.10,.24,-.62]],0x11181c,'ULTRASONIC RX / GND',.042);
+
+H([[0,-.25,2.92],[.0,.45,2.25],[-2.45,.32,1.05],[-3.10,.24,.05]],0x26e58b,'CAMERA / GPIO',.050);
+H([[0,-.25,2.80],[.15,.58,2.08],[-2.20,.35,1.20],[-3.10,.24,.42]],0xff334e,'CAMERA / POWER',.046);
+H([[0,-.25,3.08],[.18,.42,2.32],[-2.30,.30,.78],[-3.10,.24,-.46]],0x11181c,'CAMERA / GND',.042);
+
+H([[0,.96,1.95],[.75,1.02,1.55],[1.55,.78,1.18],[2.50,.38,.25]],0x26e58b,'SIGNAL CATCHER / GPIO',.050);
+H([[0,.80,1.95],[.80,.96,1.46],[1.65,.74,1.12],[2.50,.38,.16]],0xff334e,'SIGNAL CATCHER / POWER',.046);
+H([[0,1.08,1.95],[.78,1.10,1.34],[1.65,.80,.98],[2.50,.38,-.30]],0x11181c,'SIGNAL CATCHER / GND',.042);
+
+/* ESP32 and bus. */
+H([[-.15,.36,1.16],[-.55,.40,.82],[-1.22,.30,.52]],0xff334e,'ESP32 / POWER',.060);
+H([[-.15,.36,-1.16],[-.55,.40,-.82],[-1.22,.30,-.52]],0x11181c,'ESP32 / GND',.052);
+
+/* Battery and I/O board are routed around the bus, not through it. */
+H([[3.18,-.05,.92],[2.70,.12,.76],[1.65,.30,1.16],[-.15,.36,1.16]],0xff334e,'BATTERY / POWER',.066);
+H([[3.18,-.05,-.92],[2.70,.10,-.76],[1.65,.30,-1.16],[-.15,.36,-1.16]],0x11181c,'BATTERY / GND',.052);
+
+H([[-3.38,.02,.88],[-2.80,.20,.90],[-1.55,.32,1.16],[-.15,.36,1.16]],0xff334e,'I/O / POWER',.048);
+H([[-3.38,.02,-.88],[-2.80,.20,-.90],[-1.55,.32,-1.16],[-.15,.36,-1.16]],0x11181c,'I/O / GND',.044);
+
+/* Display data stays above the PCB so it does not bury into ground. */
+H([[.55,.14,.50],[.20,.70,.42],[-.20,1.16,-.05],[-.15,1.62,-1.70]],0x36a5ff,'DISPLAY / DATA',.056);
+H([[-.25,.35,1.05],[-.40,.78,.50],[-.78,1.28,-.55],[-1.15,1.62,-1.70]],0xff334e,'DISPLAY / POWER',.048);
+H([[-.25,.35,-1.05],[-.05,.76,-.56],[.50,1.28,-.80],[.95,1.62,-1.70]],0x11181c,'DISPLAY / GND',.044);
+
+/* RF line stays on the upper-right side of the chassis. */
+H([[1.95,1.42,.64],[2.30,1.62,.50],[2.82,1.46,.28],[3.94,1.15,0]],0xc77dff,'RF / ANTENNA FEED',.066);
+H([[1.95,1.42,-.64],[2.35,1.55,-.48],[2.82,1.36,-.24],[3.75,1.15,0]],0x11181c,'RF / ANTENNA GND',.046);
+H([[-.10,.35,.55],[.45,.64,.70],[1.10,1.05,.70],[1.60,1.25,.60]],0xffd34d,'RADIO / ENABLE',.038);
+
+/* Harness support clips. */
+for(const [x,z] of [[-4.05,1.05],[-3.10,.20],[-2.15,.85],[-.75,-.72],[1.20,.70],[2.20,.44],[3.05,.10]])
+  box(.18,.12,.38,0x4a5a5f,x,.40,z,internals,.7,.32);
+
+label('TX',-3.70,.62,.92,.20,internals);
+label('RX',-3.70,.62,.30,.20,internals);
+label('CAM',-3.72,.62,-.05,.20,internals);
+label('RF',2.85,1.88,.25,.20,internals);
+label('DISP',-.15,2.08,-1.55,.20,internals);
+
+const circuitWires=harness;
+
+/* Moving electricity particles. */
+const particles=[];
+function particlesOnWire(w,c){
+ for(let i=0;i<5;i++){
+  const p=glow(c,.065,new T.Vector3(),internals);
+  p.userData={wire:w,offset:i/5,speed:.12};
+  particles.push(p);
+ }
+}
+circuitWires.forEach((w)=>particlesOnWire(
+  w,
+  w.mesh.userData.name.includes('GND') ? 0x879398 :
+  w.mesh.userData.name.includes('POWER') ? 0xffe55a :
+  w.mesh.userData.name.includes('RF') ? 0xc77dff :
+  w.mesh.userData.name.includes('DISPLAY') ? 0x73b9ff :
+  w.mesh.userData.name.includes('ENABLE') ? 0xffd34d :
+  0x6cffae
+));
+
+/* ==========================================================
+   EXPLODE / OPEN CASING
+   Panels physically separate from the central circuit.
+   ========================================================== */
+const exploded=new T.Group();root.add(exploded);
+exploded.visible=false;
+
+const panels=[
+ {obj:box(10.8,.30,4.25,0xa64a17,0,3.25,0,exploded,.75,.3),home:new T.Vector3(0,3.25,0),open:new T.Vector3(0,6.0,0)},
+ {obj:box(10.8,.30,4.25,0x71300f,0,-3.45,0,exploded,.75,.3),home:new T.Vector3(0,-3.45,0),open:new T.Vector3(0,-6.1,0)},
+ {obj:box(.30,6.6,4.25,0x8f3c13,-5.45,-.1,0,exploded,.75,.3),home:new T.Vector3(-5.45,-.1,0),open:new T.Vector3(-9.0,-.1,0)},
+ {obj:box(.30,6.6,4.25,0x8f3c13,5.45,-.1,0,exploded,.75,.3),home:new T.Vector3(5.45,-.1,0),open:new T.Vector3(9.0,-.1,0)},
+ {obj:box(10.8,6.6,.25,0x281008,0,-.1,2.12,exploded,.7,.25),home:new T.Vector3(0,-.1,2.12),open:new T.Vector3(0,-.1,4.4)}
+];
+
+function addPanelDetails(){
+ panels[2].obj.add(label('LEFT SENSOR BANK',0,0,2.15,.24,panels[2].obj));
+ panels[3].obj.add(label('RIGHT SENSOR BANK',0,0,2.15,.24,panels[3].obj));
+}
+addPanelDetails();
+
+
+/* Flexible sensor cable sleeves: short and elevated so they never dip into the ground plane. */
+const flexSleeves=[];
+for(const [sx,sz,ex,ez,side] of [
+ [-5.0,1.68,-4.18,1.20,'L'],[-5.0,-1.68,-4.18,-1.20,'L'],
+ [5.0,1.68,4.18,1.20,'R'],[5.0,-1.68,4.18,-1.20,'R']
+]){
+ const sleeve=tube([
+  [sx,0,sz],
+  [sx+(side==='L'?-0.45:0.45),.22,sz],
+  [ex,.28,ez]
+ ],0x26343a,.075,exploded);
+ sleeve.mesh.material.roughness=.5;
+ flexSleeves.push(sleeve);
+}
+
+/* Small mounting bolts stay visible in exploded view. */
+for(const x of [-4.9,4.9])for(const y of [-2.8,2.7]){
+ const b=cyl(.11,.10,0x8c9b9d,x,y,2.33,exploded,.75,.2);b.rotation.x=Math.PI/2;
+}
+
+/* ==========================================================
+   STRONG RADIO FIELD
+   Concentric water-ripple rings + spherical RF shells + 
+   directional lobes. These are intentionally exaggerated for
+   visual clarity while staying coherent with the antenna.
+   ========================================================== */
+const ripplePool=[];
+for(let i=0;i<12;i++){
+ const ring=new T.Mesh(
+  new T.RingGeometry(.18,.28,72),
+  new T.MeshBasicMaterial({
+   color:0x4eeaff,transparent:true,opacity:0,side:T.DoubleSide,
+   depthWrite:false,blending:T.AdditiveBlending
+  })
+ );
+ ring.rotation.x=-Math.PI/2;
+ ring.position.set(3.95,1.10,0);
+ waves.add(ring);
+ ripplePool.push({ring,delay:i*.18});
+}
+
+const sphereWaves=[];
+for(let i=0;i<7;i++){
+ const s=new T.Mesh(
+  new T.SphereGeometry(1,40,24),
+  new T.MeshBasicMaterial({
+   color:i%2?0x28b9ff:0x7af3ff,
+   wireframe:true,transparent:true,opacity:0,
+   depthWrite:false,blending:T.AdditiveBlending
+  })
+ );
+ s.position.set(3.95,2.0,0);
+ waves.add(s);
+ sphereWaves.push({mesh:s,delay:i*.32});
+}
+
+/* Broad volumetric-looking halo made from nested translucent spheres. */
+const radioHalo=[];
+for(let i=0;i<5;i++){
+ const h=new T.Mesh(
+  new T.SphereGeometry(1,28,18),
+  new T.MeshBasicMaterial({
+   color:0x29d6ff,transparent:true,opacity:0,
+   depthWrite:false,blending:T.AdditiveBlending
+  })
+ );
+ h.position.set(3.95,2.0,0);waves.add(h);
+ radioHalo.push({mesh:h,delay:i*.4});
+}
+
+/* Directional RF lobes around the antenna. */
+const lobes=[];
+for(let i=0;i<6;i++){
+ const geo=new T.ConeGeometry(.25,4.2,24,1,true);
+ const l=new T.Mesh(geo,new T.MeshBasicMaterial({
+  color:0x35ddff,transparent:true,opacity:0,
+  wireframe:true,depthWrite:false,blending:T.AdditiveBlending
+ }));
+ l.position.set(3.95,2.0,0);
+ l.rotation.z=-Math.PI/2;
+ l.rotation.y=(i/6)*Math.PI*2;
+ waves.add(l);lobes.push(l);
+}
+
+/* Component inspection panel. */
+const sensorPanel=document.getElementById('sensorDetails');
+const sdName=document.getElementById('sdName');
+const sdDoes=document.getElementById('sdDoes');
+const sdHow=document.getElementById('sdHow');
+const sdOut=document.getElementById('sdOut');
+const sdRoute=document.getElementById('sdRoute');
+const sdDemo=document.getElementById('sdDemo');
+const sdChip=document.getElementById('sdChip');
+let selectedSensor=null;
+
+function showSensorDetails(name){
+ const d=SENSOR_DETAILS[name]; if(!d)return;
+ selectedSensor=name;
+ sensorPanel.classList.add('show');
+ sdName.innerHTML='<b style="color:#e9fbff">'+name+'</b>';
+ sdDoes.textContent=d.does;
+ sdHow.textContent=d.how;
+ sdOut.textContent=d.out;
+ sdRoute.textContent=d.route;
+ sdDemo.textContent=d.demo;
+ sdChip.textContent=d.chip;
+ sdChip.style.background=d.color;
+ document.querySelectorAll('.sd-btn').forEach(b=>b.classList.toggle('active',b.dataset.sel===name));
+}
+function rotateSensor(g){
+ g.userData.angle=(g.userData.angle+1)%3;
+ const a=[-0.38,0,.38][g.userData.angle];
+ if(g.userData.type==='ultrasonic'){
+   const side=g.userData.side==='L'?-1:1;
+   g.userData.head.rotation.y=a*side;
+   if(g.userData.transducer)g.userData.transducer.position.x=g.userData.homeX+side*(.82*Math.cos(a));
+ }else if(g.userData.type==='camera'){
+   g.userData.head.rotation.y=a*.6;
+   g.userData.lens.rotation.y=a*.6;
+ }else if(g.userData.type==='signal'){
+   g.userData.head.rotation.z=a;
+   g.userData.mast.rotation.z=a*.5;
+ }
+ showSensorDetails(g.userData.name);
+}
+
+document.querySelectorAll('.sd-btn').forEach(b=>b.addEventListener('click',()=>{
+ const g=sensors.find(s=>s.userData.name===b.dataset.sel);
+ if(g) rotateSensor(g);
+}));
+
+/* Controls */
+let open=false,transmitting=false,phase=0;
+const podButton=document.getElementById('podButton');
+const simButton=document.getElementById('simButton');
+const status=document.getElementById('status');
+
+function setOpen(v){
+ open=v;
+ closed.visible=!v;
+ internals.visible=v;
+ exploded.visible=v;
+ hardware.visible=true;
+ sensorPanel.classList.toggle('show',v);
+ document.getElementById('info').innerHTML=
+ `<b style="color:#e8fbff">ANTAR A</b> <span style="opacity:.6">· concept model, nothing built</span><br>ESP32: CONCEPT<br>SENSORS: 4 / 4<br>RADIO: ${transmitting?'TX ACTIVE':'STANDBY'}<br>HARNESS: 22 LINKS<br>TEMP: 34.6°C`;
+ podButton.textContent=v?'CLOSE POD':'OPEN POD';
+ podButton.classList.toggle('primary',!v);
+ status.textContent=v?(transmitting?'OPEN • TRANSMITTING':'OPEN • INSPECTING'):(transmitting?'SEALED • TRANSMITTING':'SEALED • STANDBY');
+}
+podButton.onclick=()=>setOpen(!open);
+
+let timer=null;
+simButton.onclick=()=>{
+ transmitting=!transmitting;
+ simButton.textContent=transmitting?'STOP TX':'TRANSMIT';
+ simButton.classList.toggle('primary',transmitting);
+ status.textContent=(open?'OPEN • ':'SEALED • ')+(transmitting?'TRANSMITTING':'STANDBY');
+ drawDisplay(transmitting);
+ if(timer)clearInterval(timer);
+ if(transmitting){
+  timer=setInterval(()=>{phase++;drawDisplay(true)},500);
+ }else drawDisplay(false);
+};
+
+/* Sensor click: manually rotate specialized modules. */
+const ray=new T.Raycaster(),mouse=new T.Vector2();
+renderer.domElement.addEventListener('click',e=>{
+ if(e.target!==renderer.domElement)return;
+ mouse.x=e.clientX/innerWidth*2-1;
+ mouse.y=-(e.clientY/innerHeight)*2+1;
+ ray.setFromCamera(mouse,camera);
+ const objects=sensors.flatMap(s=>s.children);
+ const hits=ray.intersectObjects(objects,true);
+ if(!hits.length)return;
+ let g=hits[0].object;
+ while(g.parent && !g.userData.name)g=g.parent;
+ if(!g.userData.name)return;
+ rotateSensor(g);
+});
+
+/* Orbit controls */
+
+const ctrl={target:new T.Vector3(0,0,0),yaw:.68,pitch:-.18,dist:21,drag:false,right:false,lx:0,ly:0};
+function updateCam(){
+ camera.position.set(
+  ctrl.target.x+ctrl.dist*Math.cos(ctrl.pitch)*Math.sin(ctrl.yaw),
+  ctrl.target.y-ctrl.dist*Math.sin(ctrl.pitch),
+  ctrl.target.z+ctrl.dist*Math.cos(ctrl.pitch)*Math.cos(ctrl.yaw)
+ );
+ camera.lookAt(ctrl.target);
+}
+renderer.domElement.onmousedown=e=>{ctrl.drag=true;ctrl.right=e.button===2;ctrl.lx=e.clientX;ctrl.ly=e.clientY};
+addEventListener('mouseup',()=>ctrl.drag=false);
+renderer.domElement.oncontextmenu=e=>e.preventDefault();
+addEventListener('mousemove',e=>{
+ if(!ctrl.drag)return;
+ const dx=e.clientX-ctrl.lx,dy=e.clientY-ctrl.ly;ctrl.lx=e.clientX;ctrl.ly=e.clientY;
+ if(ctrl.right){ctrl.target.x-=dx*.018;ctrl.target.y+=dy*.018}
+ else{ctrl.yaw-=dx*.008;ctrl.pitch-=dy*.008;ctrl.pitch=Math.max(-1.1,Math.min(1.1,ctrl.pitch))}
+});
+renderer.domElement.onwheel=e=>{
+ e.preventDefault();ctrl.dist*=Math.exp(e.deltaY*.001);ctrl.dist=Math.max(9,Math.min(40,ctrl.dist));
+};
+
+document.getElementById('resetButton').onclick=()=>{
+ ctrl.target.set(0,0,0);ctrl.yaw=.68;ctrl.pitch=-.18;ctrl.dist=21;
+ setOpen(false);transmitting=false;simButton.textContent='TRANSMIT';simButton.classList.remove('primary');drawDisplay(false);
+ selectedSensor=null;document.querySelectorAll('.sd-btn').forEach(b=>b.classList.remove('active'));
+ document.getElementById('info').innerHTML=`<b style="color:#e8fbff">ANTAR A</b> <span style="opacity:.6">· concept model, nothing built</span><br>ESP32: CONCEPT<br>ULTRASONIC: 2CH<br>CAMERA: EXPANSION SLOT<br>RF LINK: CONCEPT<br>RADIO: STANDBY<br>HARNESS: 22 LINKS<br>SPEED: 0.0 km/h<br>TEMP: 34.6°C`;
+};
+
+/* Animate opening, current, antenna and radio waves. */
+const clock=new T.Clock();
+starsPts.rotation.y=.0001;
+function animate(){
+ requestAnimationFrame(animate);
+ const t=clock.getElapsedTime();
+
+ /* Simulated ultrasonic speed-detection pulses. */
+ ultrasonicPulses.forEach((q,i)=>{
+  const u=(t*0.8-(i*.13))%1;
+  q.visible=transmitting && open;
+  if(q.visible){
+   const s=.35+u*3.0;
+   q.scale.set(s,s,s);
+   q.material.opacity=Math.max(0,.55-u*.55);
+   q.position.x=-3.95 + u*7.9;
+   q.position.z=4.0;
+  }
+ });
+
+ const simulatedSpeed=transmitting ? (58 + Math.sin(t*2.2)*8 + Math.sin(t*.63)*3) : 0;
+ if(transmitting){
+   document.getElementById('info').innerHTML=
+    `<b style="color:#e8fbff">ANTAR A</b> <span style="opacity:.6">· concept model, nothing built</span><br>
+ESP32: CONCEPT<br>
+ULTRASONIC: 2CH<br>
+CAMERA: EXPANSION SLOT<br>
+RF LINK: CONCEPT<br>
+RADIO: <span style="color:#55ebff">TX ACTIVE</span><br>
+SPEED: ${simulatedSpeed.toFixed(1)} km/h<br>
+TEMP: 34.6°C`;
+ }
+
+ const targetOpen=open?1:0;
+ panels.forEach((p,i)=>{
+  const a=p.open.clone().multiplyScalar(targetOpen);
+  p.obj.position.lerp(a,.09);
+ });
+
+ particles.forEach(p=>{
+  const u=(p.userData.offset+t*p.userData.speed*(transmitting?3.2:1))%1;
+  p.position.copy(p.userData.wire.curve.getPointAt(u));
+  p.visible=open;
+ });
+ harness.forEach((w,i)=>{
+   w.mesh.material.emissiveIntensity=transmitting && i<14
+     ? (.20+.10*Math.sin(t*8+i))
+     : .07;
+ });
+
+ antenna.rotation.z=transmitting?Math.sin(t*3)*.015:0;
+ antLight.intensity=transmitting?6.5:0;
+ if(transmitting) antTip.material.emissiveIntensity=3.5+Math.sin(t*8)*1.5;
+
+ ripplePool.forEach((r,i)=>{
+  const u=(t*.55-r.delay)%3;
+  if(!transmitting||u<0){r.ring.material.opacity=0;return;}
+  const s=.5+u*2.3;
+  r.ring.scale.set(s,s,s);
+  r.ring.material.opacity=Math.max(0,.42-u*.14);
+ });
+ sphereWaves.forEach((r,i)=>{
+  const u=(t*.35-r.delay)%3.2;
+  if(!transmitting||u<0){r.mesh.material.opacity=0;return;}
+  const s=.3+u*1.25;
+  r.mesh.scale.setScalar(s);
+  r.mesh.material.opacity=Math.max(0,.22-u*.055);
+ });
+
+ drawDisplayIfNeeded(t);
+ updateCam();
+ renderer.render(scene,camera);
+}
+let lastScreen=-1;
+function drawDisplayIfNeeded(t){
+ if(transmitting && Math.floor(t*3)!==lastScreen){lastScreen=Math.floor(t*3);drawDisplay(true)}
+}
+setOpen(false);updateCam();
+document.getElementById('loading').style.display='none';
+animate();
+
+addEventListener('resize',()=>{
+ camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);
+});
+})();
+</script>
+</body>
+</html>

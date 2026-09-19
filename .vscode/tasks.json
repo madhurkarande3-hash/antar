@@ -1,0 +1,44 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "ANTAR: set up backend (first time)",
+      "type": "shell",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "windows": {
+        "command": "if (!(Test-Path .venv)) { py -3 -m venv .venv }; .\\.venv\\Scripts\\python.exe -m pip install --upgrade pip; .\\.venv\\Scripts\\python.exe -m pip install -r requirements-dev.txt"
+      },
+      "linux": {
+        "command": "[ -d .venv ] || python3 -m venv .venv; .venv/bin/python -m pip install --upgrade pip && .venv/bin/python -m pip install -r requirements-dev.txt"
+      },
+      "osx": {
+        "command": "[ -d .venv ] || python3 -m venv .venv; .venv/bin/python -m pip install --upgrade pip && .venv/bin/python -m pip install -r requirements-dev.txt"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "ANTAR: run backend on localhost:8000",
+      "type": "shell",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "windows": { "command": ".\\.venv\\Scripts\\python.exe -m uvicorn antar.api:app --reload --port 8000" },
+      "linux": { "command": ".venv/bin/python -m uvicorn antar.api:app --reload --port 8000" },
+      "osx": { "command": ".venv/bin/python -m uvicorn antar.api:app --reload --port 8000" },
+      "isBackground": true,
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": {
+        "pattern": { "regexp": "^__never__$" },
+        "background": { "activeBegins": true, "beginsPattern": "Will watch|Started server", "endsPattern": "Application startup complete" }
+      }
+    },
+    {
+      "label": "ANTAR: run tests",
+      "type": "shell",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "windows": { "command": ".\\.venv\\Scripts\\python.exe -m pytest -q" },
+      "linux": { "command": ".venv/bin/python -m pytest -q" },
+      "osx": { "command": ".venv/bin/python -m pytest -q" },
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    }
+  ]
+}

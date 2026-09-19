@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ANTAR · The road notices when you don't arrive</title>
+<meta name="description" content="ANTAR: low-cost roadside pods that detect crashes on unmonitored roads by noticing a vehicle that never arrives.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="prefetch" href="simulation/antar-sim.html">
+<link rel="prefetch" href="pod/index.html">
+<style>
+@font-face{font-family:'Barlow';src:url('assets/fonts/barlow-latin-400-normal.woff2') format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'Barlow';src:url('assets/fonts/barlow-latin-500-normal.woff2') format('woff2');font-weight:500;font-display:swap}
+@font-face{font-family:'Barlow';src:url('assets/fonts/barlow-latin-600-normal.woff2') format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:'Barlow Condensed';src:url('assets/fonts/barlow-condensed-latin-600-normal.woff2') format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:'Barlow Condensed';src:url('assets/fonts/barlow-condensed-latin-700-normal.woff2') format('woff2');font-weight:700;font-display:swap}
+@font-face{font-family:'IBM Plex Mono';src:url('assets/fonts/ibm-plex-mono-latin-500-normal.woff2') format('woff2');font-weight:500;font-display:swap}
+@font-face{font-family:'IBM Plex Mono';src:url('assets/fonts/ibm-plex-mono-latin-600-normal.woff2') format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:'Cormorant Garamond';src:url('assets/fonts/cormorant-garamond-latin.woff2') format('woff2');font-weight:300 700;font-display:swap}
+@font-face{font-family:'Lora';src:url('assets/fonts/lora-latin.woff2') format('woff2');font-weight:400 700;font-display:swap}
+:root{
+  color-scheme:dark;
+  --night:#0a0b0a; --asphalt:#121412; --kerb:#232623; --line:#2e322e; --dust:#8b9690; --paper:#eef3f1;
+  --signal:#5ce1e6; --amber:#ffc857; --amber-dim:#6e5418; --ok:#6dffb3; --alert:#ff4f6d;
+  --sans:"Barlow","Segoe UI",system-ui,sans-serif; --cond:"Barlow Condensed","Arial Narrow",sans-serif; --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background-color:var(--night);color:var(--paper);font:16px/1.55 var(--sans);-webkit-font-smoothing:antialiased;
+  background-image:linear-gradient(rgba(233,238,240,.028) 1px,transparent 1px),linear-gradient(90deg,rgba(233,238,240,.028) 1px,transparent 1px),
+    linear-gradient(rgba(233,238,240,.012) 1px,transparent 1px),linear-gradient(90deg,rgba(233,238,240,.012) 1px,transparent 1px);
+  background-size:120px 120px,120px 120px,24px 24px,24px 24px;background-attachment:fixed}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--signal);outline-offset:3px}
+.wrap{width:min(1120px,calc(100% - 40px));margin:0 auto}
+
+/* ---------- intro overlay ---------- */
+#intro{position:fixed;inset:0;z-index:100;background:#000;overflow:hidden;transition:opacity .7s ease}
+#intro.out{opacity:0;pointer-events:none}
+#intro[hidden]{display:none}
+.twc-stage{position:absolute;inset:0}
+.twc-svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.twc-logo{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:max(14px, calc(34px * var(--twc-s,1)));visibility:hidden;pointer-events:none}
+.twc-mark{font:400 max(30px, calc(104px * var(--twc-s,1)))/1 "Cormorant Garamond",Georgia,serif;color:#f6f7fa;white-space:nowrap}
+.twc-rule{height:1px;background:rgba(223,229,238,.45);width:0}
+.twc-sub{font:max(9.5px, calc(17px * var(--twc-s,1))) "Lora",Georgia,serif;color:rgba(223,229,238,.62);letter-spacing:.46em;text-indent:.46em;text-transform:uppercase;white-space:nowrap}
+.intro-ui{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;align-items:center;padding:18px 22px;gap:12px}
+.boot{font:500 11.5px var(--mono);color:rgba(223,232,230,.42);letter-spacing:.06em;display:flex;align-items:center;gap:8px}
+.boot i{width:6px;height:6px;border-radius:50%;background:rgba(223,232,230,.35)}
+.boot.ok i{background:var(--signal);box-shadow:0 0 8px rgba(92,225,230,.6)}
+.skip{background:none;border:1px solid rgba(223,232,230,.22);color:rgba(223,232,230,.7);font:600 12px var(--cond);letter-spacing:.18em;text-transform:uppercase;padding:7px 14px;cursor:pointer}
+.skip:hover{color:#fff;border-color:rgba(223,232,230,.6)}
+
+/* ---------- page ---------- */
+.top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 0;border-bottom:1px solid var(--kerb)}
+.mark{display:flex;align-items:baseline;gap:14px}
+.mark b{font:700 22px var(--cond);letter-spacing:.34em}
+.mark span{font:600 12.5px var(--cond);letter-spacing:.16em;text-transform:uppercase;color:var(--dust)}
+.top nav{display:flex;gap:18px;font-size:14px}
+.top nav a{color:var(--dust);text-decoration:none;border-bottom:1px solid var(--line)}
+.top nav a:hover{color:var(--paper)}
+
+.hero{padding:88px 0 56px;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr);gap:48px;align-items:end}
+.kicker{font:600 13px var(--cond);letter-spacing:.2em;text-transform:uppercase;color:var(--amber);margin:0 0 18px}
+h1{font:700 clamp(44px,6.4vw,82px)/.98 var(--cond);letter-spacing:.005em;margin:0;text-wrap:balance}
+h1 em{font-style:normal;color:var(--signal)}
+.lede{color:#c6ceca;font-size:18px;max-width:52ch;margin:24px 0 0}
+.cta{display:flex;flex-wrap:wrap;gap:10px;margin-top:32px}
+.btn{display:inline-flex;align-items:center;gap:10px;text-decoration:none;font:600 14px var(--sans);padding:12px 18px;border:1px solid var(--line);color:var(--paper);background:var(--asphalt)}
+.btn:hover{border-color:var(--dust)}
+.btn.primary{border-color:var(--signal);color:var(--signal);box-shadow:0 0 18px rgba(92,225,230,.12)}
+.btn.primary:hover{background:rgba(92,225,230,.08)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--dust)}
+.dot.online{background:var(--signal);box-shadow:0 0 10px rgba(92,225,230,.6)}
+@keyframes blink{50%{opacity:.3}}
+.status{font:500 12px var(--mono);color:var(--dust);margin-top:12px;min-height:1.4em}
+
+.proof{border-left:1px solid var(--kerb);padding-left:32px;display:grid;gap:26px}
+.proof div b{display:block;font:600 40px/1 var(--mono);color:var(--paper)}
+.proof div span{display:block;color:var(--dust);font-size:14px;margin-top:6px;max-width:30ch}
+
+.label{font:600 13px var(--cond);letter-spacing:.2em;text-transform:uppercase;color:var(--dust);margin:0 0 18px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--kerb);border-bottom:1px solid var(--kerb)}
+.step{padding:26px 26px 30px 0}
+.step+.step{padding-left:26px;border-left:1px solid var(--kerb)}
+.step small{font:600 12px var(--mono);color:var(--amber)}
+.step h3{font:600 22px var(--cond);letter-spacing:.02em;margin:8px 0 8px}
+.step p{margin:0;color:#aeb7b2}
+
+.demos{padding:64px 0 24px}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--kerb);border:1px solid var(--kerb)}
+.card{display:flex;flex-direction:column;gap:10px;text-decoration:none;background:var(--night);padding:26px;min-height:230px;transition:background .15s}
+.card:hover{background:var(--asphalt)}
+.card small{font:600 12px var(--cond);letter-spacing:.18em;text-transform:uppercase;color:var(--dust);display:flex;align-items:center;gap:8px}
+.card h3{font:600 26px var(--cond);margin:0;letter-spacing:.02em}
+.card p{margin:0;color:#aeb7b2;flex:1}
+.card .go{font:600 13px var(--mono);color:var(--amber)}
+.card:hover .go{color:var(--paper)}
+
+footer{padding:34px 0 48px;color:var(--dust);font-size:13.5px;display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;border-top:1px solid var(--kerb);margin-top:40px}
+footer button{background:none;border:0;color:var(--dust);font:inherit;text-decoration:underline;cursor:pointer;padding:0}
+footer button:hover{color:var(--paper)}
+
+@media (max-width:900px){
+  .hero{grid-template-columns:1fr;padding-top:56px;gap:36px}
+  .proof{border-left:0;border-top:1px solid var(--kerb);padding:28px 0 0;grid-template-columns:repeat(3,1fr);gap:16px}
+  .proof div b{font-size:28px}
+  .steps,.cards{grid-template-columns:1fr}
+  .step,.step+.step{padding:22px 0;border-left:0}
+  .step+.step{border-top:1px solid var(--kerb)}
+}
+@media (max-width:560px){.top nav a:not(.keep){display:none}.proof{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<div id="intro" aria-label="ANTAR intro" hidden>
+  <div class="twc-stage" id="introStage"></div>
+  <div class="intro-ui">
+    <div class="boot" id="boot"><i></i><span>Preparing ANTAR</span></div>
+    <button class="skip" id="skipIntro">Skip intro</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <header class="top">
+    <div class="mark"><b>ANTAR</b><span>Team Bounded · RevengersHack</span></div>
+    <nav><a href="#demos" class="keep">Demos</a><a href="#how">How it works</a><a id="githubLink" href="#" hidden>GitHub</a></nav>
+  </header>
+
+  <section class="hero">
+    <div>
+      <p class="kicker">Crash detection for unmonitored roads</p>
+      <h1>The road notices when <em>you don't arrive.</em></h1>
+      <p class="lede">Low-cost pods on existing poles are designed to time every passing vehicle. When one never reaches the next pod and the traffic behind it slows, ANTAR is designed to alert the hospital, the highway patrol and nearby volunteers at the same moment.</p>
+      <div class="cta">
+        <a class="btn primary" href="simulation/antar-sim.html"><i class="dot online"></i>Open the simulator</a>
+        <a class="btn" href="pod/index.html">Explore the pod in 3D</a>
+      </div>
+      <div class="status">Runs entirely in your browser. No install, no login, no server.</div>
+    </div>
+    <div class="proof" aria-label="Results">
+      <div><b>120/120</b><span>correct decisions when the detection logic was replayed on unseen simulated traffic, including with a pod switched off</span></div>
+      <div><b>67 s</b><span>median from the vehicle stopping to the alert, in simulation</span></div>
+      <div><b>₹2,500</b><span>design target per pod, to clamp onto poles already on the road. No pod built yet</span></div>
+    </div>
+  </section>
+
+  <section id="how">
+    <p class="label">How it works</p>
+    <div class="steps">
+      <div class="step"><small>01</small><h3>Every vehicle is expected</h3><p>A pod is designed to measure each passing vehicle's speed and size, then tell the next pod when to expect it. Nothing about the driver is stored.</p></div>
+      <div class="step"><small>02</small><h3>Absence is the signal</h3><p>If the vehicle never arrives, ANTAR checks the traffic behind it. A turn-off leaves traffic normal. A crash slows and blocks it.</p></div>
+      <div class="step"><small>03</small><h3>Help, all at once</h3><p>The alert is designed to hop pod to pod to the nearest tower and reach the hospital, patrol and registered neighbours within 2 km together. In the demo these recipients are simulated.</p></div>
+    </div>
+  </section>
+
+  <section class="demos" id="demos">
+    <p class="label">Try it</p>
+    <div class="cards">
+      <a class="card" href="simulation/antar-sim.html">
+        <small><i class="dot online"></i>Start here</small>
+        <h3>Road simulator</h3>
+        <p>Click <b>Scenario A</b> for normal traffic, <b>B</b> for a crash that ends in an alert, and <b>C</b> for a legal turn-off that ANTAR correctly does not report. Every step is explained as it happens.</p>
+        <span class="go">Open simulator →</span>
+      </a>
+      <a class="card" href="pod/index.html">
+        <small>3D model</small>
+        <h3>Pod explorer</h3>
+        <p>Open the enclosure, inspect the sensors, ESP32, wiring and antenna, and watch a transmission.</p>
+        <span class="go">Open pod explorer →</span>
+      </a>
+      <a class="card" id="codeCard" href="README.md">
+        <small>Backup</small>
+        <h3>Run it from the code</h3>
+        <p>Download the repository and double-click <b>index.html</b>. Everything works offline, with nothing to install.</p>
+        <span class="go">View the code →</span>
+      </a>
+    </div>
+  </section>
+
+  <footer>
+    <span>A working proof of concept: the detection logic runs for real, the traffic and the alert recipients are simulated, and no pod has been built. Full detail in <a href="STATUS.md" class="keep">STATUS.md</a>.</span>
+    <span>Intro "The Watching Circle" by Star · <button id="replayIntro">Replay intro</button></span>
+  </footer>
+</div>
+
+<script src="assets/intro.js"></script>
+<script>
+'use strict';
+/* ---- where things live ---- */
+const GITHUB_URL = '';   // paste the repo link here: shows the header button and points the "code" card at it
+if (GITHUB_URL){ const g = document.getElementById('githubLink'); g.href = GITHUB_URL; g.hidden = false; document.getElementById('codeCard').href = GITHUB_URL; }
+
+const store = {
+  get(s, k){ try { return s.getItem(k); } catch (e) { return null; } },
+  set(s, k, v){ try { s.setItem(k, v); } catch (e) {} }
+};
+
+/* ---- entrance status: pages are prefetched while the intro plays ---- */
+addEventListener('load', () => { const boot = document.getElementById('boot'); boot.classList.add('ok'); boot.querySelector('span').textContent = 'ANTAR ready'; });
+
+/* ---- intro: full on every visit ---- */
+const introEl = document.getElementById('intro');
+let player = null;
+function endIntro(){
+  if (introEl.hidden || introEl.classList.contains('out')) return;
+  introEl.classList.add('out');
+  document.documentElement.style.overflow = '';
+  store.set(sessionStorage, 'antar-intro', 'played'); store.set(localStorage, 'antar-intro', 'seen');
+  setTimeout(() => { introEl.hidden = true; introEl.classList.remove('out'); document.getElementById('introStage').innerHTML = ''; }, 750);
+}
+function startIntro(mode){
+  if (!window.AntarIntro){ return; }
+  introEl.hidden = false; introEl.classList.remove('out');
+  document.documentElement.style.overflow = 'hidden';
+  player = AntarIntro.play(document.getElementById('introStage'), { mode, onDone: endIntro });
+}
+document.getElementById('skipIntro').onclick = () => { if (player) player.skip(); else endIntro(); };
+document.getElementById('replayIntro').onclick = () => { scrollTo(0, 0); startIntro('full'); };
+addEventListener('keydown', e => { if (!introEl.hidden && ['Escape', 'Enter', ' '].includes(e.key)){ e.preventDefault(); document.getElementById('skipIntro').click(); } });
+
+const q = new URLSearchParams(location.search).get('intro');
+if (q === 'full' || q === 'short') startIntro(q);
+else if (q !== 'off') startIntro('full');   // every visit plays the full intro; Skip, Esc, Enter or Space ends it
+</script>
+</body>
+</html>

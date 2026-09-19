@@ -1,0 +1,20 @@
+# Optional: deploy the control-room extension on Render. Not needed for the main demo, which is static.
+# To use it, move this file to the repository root first (Render looks for render.yaml there).
+services:
+  - type: web
+    name: antar-control-room
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn antar.api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: ANTAR_PUBLIC_DEMO
+        value: "1"
+      - key: ANTAR_POD_KEY
+        generateValue: true
+      - key: ANTAR_DB
+        value: /tmp/antar.db
