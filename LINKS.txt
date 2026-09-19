@@ -2,7 +2,7 @@ ANTAR — links
 =============
 
 Live demo (Vercel):   <paste the URL here>
-Repository (GitHub):  <paste the URL here>
+Repository (GitHub):  https://github.com/madhurkarande3-hash/antar
 
 Team Bounded · RevengersHack, Open Innovation track
 Madhur Karande (lead) · Mrigaj Waikar · Arahant Kankal
