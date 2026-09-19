@@ -9,6 +9,13 @@
 > detection logic runs for real on simulated traffic; no pod, firmware, sensor or
 > emergency-service integration exists.
 
+> **Which parts run where.** The demo — landing page, simulator and 3D pod explorer —
+> runs in any modern browser on **any operating system**, with nothing to install.
+> The **optional** control-room backend is a local Python service and is **preferred on
+> Windows**: double-click `run.bat` and it sets itself up. It also runs on macOS and
+> Linux with `bash run.sh` (Python 3.10 or newer), but Windows is the path we have
+> tested most. The backend is **not needed** to judge the prototype.
+
 ## For judges: 3 minutes
 
 1. Open the live link (or `index.html`). The intro plays each time; press **Skip** or Esc to jump past it. Add `?intro=off` to any page URL to turn it off.
