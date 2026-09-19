@@ -2,7 +2,7 @@
 
 ### The road notices when you don't arrive.
 
-> **Try it now:** **[LIVE DEMO LINK](#)** · no install, no login, runs in your browser
+> **Try it now:** **[https://antar-ebon.vercel.app](https://antar-ebon.vercel.app)** · no install, no login, runs in your browser
 > **Backup:** download this repository and double-click `index.html`. Everything works offline.
 >
 > **What is real and what is simulated:** [STATUS.md](STATUS.md). Short version: the

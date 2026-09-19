@@ -1,7 +1,7 @@
 ANTAR — links
 =============
 
-Live demo (Vercel):   <paste the URL here>
+Live demo (Vercel):   https://antar-ebon.vercel.app
 Repository (GitHub):  https://github.com/madhurkarande3-hash/antar
 
 Team Bounded · RevengersHack, Open Innovation track
