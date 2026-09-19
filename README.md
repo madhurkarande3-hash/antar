@@ -17,6 +17,9 @@
 4. Click **Scenario B**. The vehicle never arrives. ANTAR does **not** alert immediately. It watches the traffic behind for up to 90 seconds, sees it slow and bunch, and then shows **ALERT DISPATCHED**.
 5. Click **Scenario C**. The vehicle again never arrives, and the first seconds look exactly like B. This time the traffic behind stays normal, so ANTAR shows **CLEARED · LEGAL EXIT** and sends nothing.
 6. Optional: open the **Pod explorer** to inspect the physical pod concept in 3D.
+7. **What the live link cannot show:** what happens when a pod dies. That lives in the
+   control room, which runs locally. Screenshots and a five-minute setup are in
+   **[docs/control-room.md](docs/control-room.md)**.
 
 B and C are the pair that matter: *the missing vehicle creates the suspicion, the road behind it provides the corroboration.*
 
@@ -267,6 +270,11 @@ and visible:
 - Confidence in any judgement about that segment **drops by one tier**, and the console
   says why.
 
+**Seeing this for yourself:** the re-pairing is not visible on the live link, because it
+belongs to the control room. **[docs/control-room.md](docs/control-room.md)** has
+screenshots of a pod going dark and of an alert still getting out on the degraded segment,
+plus the five-minute setup if you would rather run it.
+
 In the 120-run replay (see *What is proven*), the re-paired configuration still separated
 crashes from turn-offs, though the alert took far longer and the margin narrowed. The
 design degrades rather than failing, and it does not quietly pretend it is as certain as
@@ -402,9 +410,22 @@ explores what the control room behind the tower could look like, and it needs Py
 your own machine.
 
 **Windows:** double-click `run.bat`. **macOS / Linux:** `./run.sh`. **VS Code:** open the
-folder and press `Ctrl+Shift+B` after running the first-time setup task.
+folder and press `Ctrl+Shift+B` after running the first-time setup task. Needs Python 3.10
+or newer; the first run installs FastAPI and uvicorn into a local virtual environment.
 
 Then open **http://127.0.0.1:8000** for the live console and **/docs** for the API.
+
+Once it is up, this is the sequence worth running — it is the part the live link cannot
+show:
+
+1. Press **Scenario B**, watch the alert dispatch, then **Acknowledge** and **Resolve**.
+2. Press **Scenario C** and watch an identical absence get dismissed.
+3. In the **PODS** panel, press **Take offline** on POD B. POD A re-pairs with POD C
+   across 1290 m and the threshold rises from 0.66 to 0.82.
+4. Press **Scenario B** again. The crash is still caught on the degraded segment; it just
+   takes longer and needs more evidence.
+
+Step-by-step with screenshots: **[docs/control-room.md](docs/control-room.md)**
 
 The detector in `backend/antar/detector.py` is a direct port of the one in the simulator,
 with the same numbers. Two separate things run against it: the 51-test suite, which covers
@@ -444,6 +465,7 @@ antar/
 │   ├── how-it-works.md           the detection algorithm in detail
 │   ├── architecture.md           proposed system structure and privacy position
 │   ├── scenarios.md              what each scenario shows
+│   ├── control-room.md           running the backend and watching a pod fail over
 │   ├── diagrams.md               text diagrams of the system and the decision flow
 │   ├── pod-explorer.md           what the 3D model represents
 │   └── SENSOR_SYSTEMS.md         sensor concepts and what is not selected yet

@@ -15,6 +15,7 @@ You can run all of this yourself, today, with no hardware.
 | Detection logic | inside the simulator, ported to `backend/antar/detector.py` | Arrival windows, concurrent tracking, corroboration, confidence, dispatch decision. This is real code making real decisions from the events it is given. |
 | 3D pod explorer | `pod/index.html` | An interactive model of the **proposed** pod. A drawing you can rotate, not a photograph. |
 | Control-room backend | `backend/` | Optional. FastAPI, WebSocket, SQLite, incident lifecycle, alert fan-out, pod health and re-pairing, field-ingestion API. 51 automated tests. |
+| Pod failure and re-pairing | `backend/`, and the detector itself | A pod can be taken offline; the pair re-forms across a longer gap and the alert threshold rises from 0.66 to 0.82. Not visible on the live link — see [docs/control-room.md](docs/control-room.md). |
 | Replay harness | `backend/tools/replay.py` | Re-runs the detector over traffic it has not seen and prints the results quoted below. |
 
 ## Simulated
